@@ -340,17 +340,20 @@ def load_fields(dataset, data_type, checkpoint):
     else:
         fields = onmt.io.load_fields_from_vocab(
             torch.load(opt.data + '.vocab.pt'), data_type)
+
+    tgt_chars_vocab = fields['tgt_char']
+
     fields = dict([(k, f) for (k, f) in fields.items()
                    if k in dataset.examples[0].__dict__])
 
     if data_type == 'text':
-        print(' * vocabulary size. source = %d; target = %d' %
-              (len(fields['src'].vocab), len(fields['tgt'].vocab)))
+        print(' * vocabulary size. source = %d; target = %d; target_char = %d' %
+              (len(fields['src'].vocab), len(fields['tgt'].vocab), len(tgt_chars_vocab.vocab)))
     else:
         print(' * vocabulary size. target = %d' %
               (len(fields['tgt'].vocab)))
 
-    return fields
+    return fields, tgt_chars_vocab
 
 
 def collect_report_features(fields):
@@ -477,7 +480,9 @@ def main():
     data_type = first_dataset.data_type
 
     # Load fields generated from preprocess phase.
-    fields = load_fields(first_dataset, data_type, checkpoint)
+    fields, tgt_char_vocab = load_fields(first_dataset, data_type, checkpoint)
+
+    spelling = torch.load(opt.data + '.spelling.pt')
 
     # Report src/tgt features.
     collect_report_features(fields)
