@@ -212,6 +212,10 @@ class TextDataset(ONMTDatasetBase):
             init_token=BOS_WORD, eos_token=EOS_WORD,
             pad_token=PAD_WORD)
 
+        fields["tgt_char"] = torchtext.data.Field(
+            init_token=BOS_WORD, eos_token=EOS_WORD,
+            pad_token=PAD_WORD)
+
         for j in range(n_tgt_features):
             fields["tgt_feat_"+str(j)] = \
                 torchtext.data.Field(init_token=BOS_WORD, eos_token=EOS_WORD,

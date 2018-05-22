@@ -8,6 +8,9 @@ import sys
 
 import torch
 
+from onmt.io.DatasetBase import (ONMTDatasetBase, UNK_WORD,
+                                 PAD_WORD, BOS_WORD, EOS_WORD)
+
 import onmt.io
 import onmt.opts
 
@@ -144,7 +147,7 @@ def build_save_dataset(corpus_type, fields, opt):
         window_stride=opt.window_stride,
         window=opt.window)
 
-    # We save fields in vocab.pt seperately, so make it empty.
+    # We save fields in vocab.pt separately, so make it empty.
     dataset.fields = []
 
     pt_file = "{:s}.{:s}.pt".format(opt.save_data, corpus_type)
@@ -169,6 +172,27 @@ def build_save_vocab(train_dataset, fields, opt):
     torch.save(onmt.io.save_fields_to_vocab(fields), vocab_file)
 
 
+def build_save_spelling(fields, opt):
+
+    spelling = torch.LongTensor(len(fields['tgt'].vocab), len(fields['tgt_char'].vocab)).fill_(fields['tgt_char'].vocab.stoi[PAD_WORD])
+
+    specials = [UNK_WORD, PAD_WORD, BOS_WORD, EOS_WORD]
+
+    for word in fields['tgt'].vocab.stoi:
+        w = fields['tgt'].vocab.stoi[word]
+        if word in specials:
+            spelling[w, 0] = fields['tgt_char'].vocab.stoi[word]
+            continue
+        char_index = 0
+        for char in word:
+            c = fields['tgt_char'].vocab.stoi[char]
+            spelling[w, char_index] = c
+            char_index += 1
+
+    spelling_file = opt.save_data + '.spelling.pt'
+    torch.save(spelling, spelling_file)
+
+
 def main():
     opt = parse_args()
 
@@ -186,6 +210,8 @@ def main():
 
     print("Building & saving vocabulary...")
     build_save_vocab(train_dataset_files, fields, opt)
+
+    build_save_spelling(fields, opt)
 
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)

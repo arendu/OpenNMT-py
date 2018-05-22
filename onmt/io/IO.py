@@ -2,7 +2,7 @@
 
 import os
 from collections import Counter, defaultdict, OrderedDict
-from itertools import count
+from itertools import count, chain
 
 import torch
 import torchtext.data
@@ -286,12 +286,18 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
                     val = [item for item in val if item in src_vocab]
                 elif k == 'tgt' and tgt_vocab:
                     val = [item for item in val if item in tgt_vocab]
+                if k == 'tgt':
+                    for v in list(chain(*val)):
+                        counter['tgt_char'].update(v)
                 counter[k].update(val)
 
     _build_field_vocab(fields["tgt"], counter["tgt"],
                        max_size=tgt_vocab_size,
                        min_freq=tgt_words_min_frequency)
     print(" * tgt vocab size: %d." % len(fields["tgt"].vocab))
+
+    _build_field_vocab(fields["tgt_char"], counter["tgt_char"])
+    print(" * tgt char vocab size: %d." % len(fields["tgt_char"].vocab))
 
     # All datasets have same num of n_tgt_features,
     # getting the last one is OK.
