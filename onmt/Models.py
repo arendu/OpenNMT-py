@@ -10,7 +10,6 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 import onmt
 from onmt.Utils import aeq
 
-
 def rnn_factory(rnn_type, **kwargs):
     # Use pytorch version when available.
     no_pack_padded_seq = False

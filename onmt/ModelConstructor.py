@@ -16,6 +16,7 @@ from onmt.modules import Embeddings, ImageEncoder, CopyGenerator, \
                          CNNEncoder, CNNDecoder, AudioEncoder
 from onmt.Utils import use_gpu
 from torch.nn.init import xavier_uniform
+from onmt.SpellingModels import VarLinear, VarEmbedding, WordRepresenter
 
 
 def make_embeddings(opt, word_dict, feature_dicts, for_encoder=True):
@@ -132,7 +133,7 @@ def load_test_model(opt, dummy_opt):
     return fields, model, model_opt
 
 
-def make_base_model(model_opt, fields, gpu, checkpoint=None):
+def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_char_field=None):
     """
     Args:
         model_opt: the option loaded from checkpoint.
@@ -180,7 +181,7 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None):
                                  'preprocess if you use share_embeddings!')
 
         tgt_embeddings.word_lut.weight = src_embeddings.word_lut.weight
-
+    #TODO: replace the tgt_embeddings obj with our VarEmbeddings
     decoder = make_decoder(model_opt, tgt_embeddings)
 
     # Make NMTModel(= encoder + decoder).
@@ -189,9 +190,24 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None):
 
     # Make Generator.
     if not model_opt.copy_attn:
-        generator = nn.Sequential(
-            nn.Linear(model_opt.rnn_size, len(fields["tgt"].vocab)),
-            nn.LogSoftmax(dim=-1))
+        if model_opt.use_char_composition == 'None':
+            generator = nn.Sequential(
+                nn.Linear(model_opt.rnn_size, len(fields["tgt"].vocab)),
+                nn.LogSoftmax(dim=-1))
+        else:
+            # TODO: make a new generator with VarLinear
+            word_representer = WordRepresenter(spelling,
+                                               len(tgt_char_field.vocab),
+                                               tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
+                                               model_opt.tgt_word_vec_size,
+                                               char_composition=model_opt.use_char_composition)
+            if gpu:
+                word_representer.init_cuda()
+
+            generator = nn.Sequential(
+                VarLinear(word_representer),
+                nn.LogSoftmax(dim=-1))
+            pass
         if model_opt.share_decoder_embeddings:
             generator[0].weight = decoder.embeddings.word_lut.weight
     else:

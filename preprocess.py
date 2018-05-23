@@ -225,10 +225,13 @@ def main():
     print("Building & saving vocabulary...")
     build_save_vocab(train_dataset_files, fields, opt)
 
-    build_save_spelling(fields, opt, 500)
-
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)
+    max_word_size = 0
+    for w in fields['tgt'].vocab.stoi:
+        max_word_size = max(max_word_size, len(w) + 2)
+
+    build_save_spelling(fields, opt, max_word_size)
 
 
 if __name__ == "__main__":

@@ -366,10 +366,16 @@ def collect_report_features(fields):
         print(' * tgt feature %d size = %d' % (j, len(fields[feat].vocab)))
 
 
-def build_model(model_opt, opt, fields, checkpoint):
+def build_model(model_opt, opt, fields, checkpoint, spelling=None, tgt_char_vocab=None):
     print('Building model...')
-    model = onmt.ModelConstructor.make_base_model(model_opt, fields,
-                                                  use_gpu(opt), checkpoint)
+    if spelling is not None:
+        assert tgt_char_vocab is not None
+        model = onmt.ModelConstructor.make_base_model(model_opt, fields,
+                                                      use_gpu(opt), checkpoint,
+                                                      spelling, tgt_char_vocab)
+    else:
+        model = onmt.ModelConstructor.make_base_model(model_opt, fields,
+                                                      use_gpu(opt), checkpoint)
     if len(opt.gpuid) > 1:
         print('Multi gpu training: ', opt.gpuid)
         model = nn.DataParallel(model, device_ids=opt.gpuid, dim=1)
@@ -482,13 +488,16 @@ def main():
     # Load fields generated from preprocess phase.
     fields, tgt_char_vocab = load_fields(first_dataset, data_type, checkpoint)
 
-    spelling = torch.load(opt.data + '.spelling.pt')
 
     # Report src/tgt features.
     collect_report_features(fields)
 
     # Build model.
-    model = build_model(model_opt, opt, fields, checkpoint)
+    if model_opt.use_char_composition:
+        spelling = torch.load(opt.data + '.spelling.pt')
+        model = build_model(model_opt, opt, fields, checkpoint, spelling, tgt_char_vocab)
+    else:
+        model = build_model(model_opt, opt, fields, checkpoint)
     tally_parameters(model)
     check_save_model_path()
 
