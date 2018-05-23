@@ -12,6 +12,8 @@ import torchtext
 from onmt.Utils import aeq
 from onmt.io.DatasetBase import (ONMTDatasetBase, UNK_WORD,
                                  PAD_WORD, BOS_WORD, EOS_WORD)
+BOS_CHAR = "<BOS_CHAR>"
+EOS_CHAR = "<EOS_CHAR>"
 
 
 class TextDataset(ONMTDatasetBase):
@@ -213,7 +215,7 @@ class TextDataset(ONMTDatasetBase):
             pad_token=PAD_WORD)
 
         fields["tgt_char"] = torchtext.data.Field(
-            init_token=BOS_WORD, eos_token=EOS_WORD,
+            init_token=BOS_CHAR, eos_token=EOS_CHAR,
             pad_token=PAD_WORD)
 
         for j in range(n_tgt_features):

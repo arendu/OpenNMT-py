@@ -9,10 +9,9 @@ import torchtext.data
 import torchtext.vocab
 
 from onmt.io.DatasetBase import UNK_WORD, PAD_WORD, BOS_WORD, EOS_WORD
-from onmt.io.TextDataset import TextDataset
+from onmt.io.TextDataset import TextDataset, BOS_CHAR, EOS_CHAR
 from onmt.io.ImageDataset import ImageDataset
 from onmt.io.AudioDataset import AudioDataset
-
 
 def _getstate(self):
     return dict(self.__dict__, stoi=dict(self.stoi))
@@ -287,8 +286,12 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
                 elif k == 'tgt' and tgt_vocab:
                     val = [item for item in val if item in tgt_vocab]
                 if k == 'tgt':
+                    #print(val)
                     for v in list(chain(*val)):
-                        counter['tgt_char'].update(v)
+                        #print(v)
+                        counter['tgt_char'].update(v) # v is an iterable of characters that contains a single character
+                        counter['tgt_char'].update([BOS_WORD])
+                        counter['tgt_char'].update([EOS_WORD])
                 counter[k].update(val)
 
     _build_field_vocab(fields["tgt"], counter["tgt"],

@@ -10,6 +10,7 @@ import torch
 
 from onmt.io.DatasetBase import (ONMTDatasetBase, UNK_WORD,
                                  PAD_WORD, BOS_WORD, EOS_WORD)
+from onmt.io.TextDataset import BOS_CHAR, EOS_CHAR
 
 import onmt.io
 import onmt.opts
@@ -172,22 +173,35 @@ def build_save_vocab(train_dataset, fields, opt):
     torch.save(onmt.io.save_fields_to_vocab(fields), vocab_file)
 
 
-def build_save_spelling(fields, opt):
+def build_save_spelling(fields, opt, max_word_size):
 
-    spelling = torch.LongTensor(len(fields['tgt'].vocab), len(fields['tgt_char'].vocab)).fill_(fields['tgt_char'].vocab.stoi[PAD_WORD])
+    # Will break if word longer than max_word_size
+
+    spelling = torch.LongTensor(len(fields['tgt'].vocab), max_word_size+2).fill_(fields['tgt_char'].vocab.stoi[PAD_WORD])
 
     specials = [UNK_WORD, PAD_WORD, BOS_WORD, EOS_WORD]
 
     for word in fields['tgt'].vocab.stoi:
         w = fields['tgt'].vocab.stoi[word]
-        if word in specials:
-            spelling[w, 0] = fields['tgt_char'].vocab.stoi[word]
-            continue
-        char_index = 0
-        for char in word:
-            c = fields['tgt_char'].vocab.stoi[char]
-            spelling[w, char_index] = c
-            char_index += 1
+
+        vec_c = [fields['tgt_char'].vocab.stoi[BOS_CHAR]] + \
+                [fields['tgt_char'].vocab.stoi[char] for char in ([word] if word in specials else word)] + \
+                [fields['tgt_char'].vocab.stoi[EOS_CHAR]]
+        len_word = len(vec_c)
+        vec_c += [fields['tgt_char'].vocab.stoi[PAD_WORD]]*(max_word_size - len(vec_c))
+        vec_c += [len_word]
+        vec_c += [fields['tgt'].vocab.freqs[word]]
+        spelling[w, :] = torch.LongTensor(vec_c)
+        #if word in ["gegen",BOS_WORD,EOS_WORD,UNK_WORD]:
+        #    print(spelling[w,:])
+        #    import pdb
+        #    pdb.set_trace()
+
+        #char_index = 0
+        #for char in word:
+        #    c = fields['tgt_char'].vocab.stoi[char]
+        #    spelling[w, char_index] = c
+        #    char_index += 1
 
     spelling_file = opt.save_data + '.spelling.pt'
     torch.save(spelling, spelling_file)
@@ -211,7 +225,7 @@ def main():
     print("Building & saving vocabulary...")
     build_save_vocab(train_dataset_files, fields, opt)
 
-    build_save_spelling(fields, opt)
+    build_save_spelling(fields, opt, 500)
 
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)
