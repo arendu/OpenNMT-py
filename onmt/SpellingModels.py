@@ -58,10 +58,10 @@ class WordRepresenter(nn.Module):
                 self.c_proj = None
         elif self.char_composition == 'CNN':
             assert self.we_size % 4 == 0
-            self.c1d_3g = torch.nn.Conv1d(self.ce_size + 1, self.we_size // 4, 3)
-            self.c1d_4g = torch.nn.Conv1d(self.ce_size + 1, self.we_size // 4, 4)
-            self.c1d_5g = torch.nn.Conv1d(self.ce_size + 1, self.we_size // 4, 5)
-            self.c1d_6g = torch.nn.Conv1d(self.ce_size + 1, self.we_size // 4, 6)
+            self.c1d_3g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 3)
+            self.c1d_4g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 4)
+            self.c1d_5g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 5)
+            self.c1d_6g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 6)
             if self.pool == 'Avg':
                 self.max_3g = torch.nn.AvgPool1d(self.sorted_spellings.size(1) - 3 + 1)
                 self.max_4g = torch.nn.AvgPool1d(self.sorted_spellings.size(1) - 4 + 1)
