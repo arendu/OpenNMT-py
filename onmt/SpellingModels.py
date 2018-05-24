@@ -16,13 +16,12 @@ class WordRepresenter(nn.Module):
     def __init__(self, spelling, cv_size, cp_idx, we_size,
                  bidirectional=False, dropout=0.3,
                  is_extra_feat_learnable=False,
-                 num_required_vocab=None,
-                 ce_size=25,
-                 cr_size=50,
+                 ce_size=50,
+                 cr_size=100,
                  char_composition='RNN', pool='Max'):
         super(WordRepresenter, self).__init__()
         self.spelling = spelling
-        self.sorted_spellings, self.sorted_lengths, self.unsort_idx = self.init_word2spelling()
+        self.sorted_spellings, self.sorted_lengths, self.unsort_idx, self.freqs = self.init_word2spelling()
         self.v_size = len(self.sorted_lengths)
         self.ce_size = ce_size
         self.we_size = we_size
@@ -34,10 +33,21 @@ class WordRepresenter(nn.Module):
         self.vocab_idx = Variable(torch.arange(self.v_size).long(), requires_grad=False)
         self.ce_layer.weight = nn.Parameter(
             torch.FloatTensor(self.cv_size, self.ce_size).uniform_(-0.5 / self.ce_size, 0.5 / self.ce_size))
-        self.char_composition = char_composition
+        char_comp_items = char_composition.split('+')
+        self.char_composition = char_comp_items[0]
+        if len(char_comp_items) > 1:
+            self.use_word_embeddings = char_comp_items[1].lower() == 'word'
+        else:
+            self.use_word_embeddings = False
         self.pool = pool
+        if self.use_word_embeddings:
+            self.word_embeddings = nn.Embedding(self.v_size, self.we_size)
+            self.merge_weights = nn.Sequential(
+                                                nn.Embedding(self.v_size, 1),
+                                                torch.nn.Sigmoid()
+                                              )
         if self.char_composition == 'RNN':
-            self.c_rnn = torch.nn.LSTM(self.ce_size + 1, self.cr_size,
+            self.c_rnn = torch.nn.LSTM(self.ce_size, self.cr_size,
                                        bidirectional=bidirectional, batch_first=True,
                                        dropout=self.dropout)
             if self.cr_size * (2 if bidirectional else 1) != self.we_size:
@@ -67,14 +77,8 @@ class WordRepresenter(nn.Module):
         else:
             raise BaseException("Unknown seq model")
 
-        self.num_required_vocab = num_required_vocab if num_required_vocab is not None else self.v_size
-        self.extra_ce_layer = torch.nn.Embedding(self.v_size, 1)
-        self.extra_ce_layer.weight = nn.Parameter(torch.ones(self.v_size, 1))
+        #self.extra_ce_layer = torch.nn.Embedding(self.v_size, 1)
         print('WordRepresenter init complete.')
-
-    def set_extra_feat_learnable(self, is_extra_feat_learnable):
-        self.is_extra_feat_learnable = is_extra_feat_learnable
-        self.extra_ce_layer.weight.requires_grad = is_extra_feat_learnable
 
     def init_word2spelling(self,):
         #for v, s in self.word2spelling.items():
@@ -83,13 +87,15 @@ class WordRepresenter(nn.Module):
         #    else:
         #        spellings = torch.LongTensor(s).unsqueeze(0)
         lengths = self.spelling[:, -2]
+        counts = self.spelling[:, -1].float()
+        freqs = counts / counts.sum()
         spellings = self.spelling[:, :-2]
         sorted_lengths, sort_idx = torch.sort(lengths, 0, True)
         unsort_idx = get_unsort_idx(sort_idx)
         sorted_lengths = sorted_lengths.numpy().tolist()
         sorted_spellings = spellings[sort_idx, :]
         sorted_spellings = Variable(sorted_spellings, requires_grad=False)
-        return sorted_spellings, sorted_lengths, unsort_idx
+        return sorted_spellings, sorted_lengths, unsort_idx, freqs
 
     def init_cuda(self,):
         self = self.cuda()
@@ -126,23 +132,23 @@ class WordRepresenter(nn.Module):
 
     def forward(self,):
         emb = self.ce_layer(self.sorted_spellings)
-        extra_emb = self.extra_ce_layer(self.vocab_idx).unsqueeze(1)
-        extra_emb = extra_emb.expand(extra_emb.size(0), emb.size(1), extra_emb.size(2))
-        emb = torch.cat((emb, extra_emb), dim=2)
-        if not hasattr(self, 'char_composition'):  # for back compatability
-            word_embeddings = self.rnn_representer(emb)
+        if not hasattr(self, 'char_composition'):  # for back compatibility
+            composed_word_embeddings = self.rnn_representer(emb)
         elif self.char_composition == 'RNN':
-            word_embeddings = self.rnn_representer(emb)
+            composed_word_embeddings = self.rnn_representer(emb)
         elif self.char_composition == 'CNN':
-            word_embeddings = self.cnn_representer(emb)
+            composed_word_embeddings = self.cnn_representer(emb)
         else:
             raise BaseException("unknown char_composition")
 
-        unsorted_word_embeddings = word_embeddings[self.unsort_idx, :]
-        if self.num_required_vocab > unsorted_word_embeddings.size(0):
-            e = unsorted_word_embeddings[0].unsqueeze(0)
-            e = e.expand(self.num_required_vocab - unsorted_word_embeddings.size(0), e.size(1))
-            unsorted_word_embeddings = torch.cat([unsorted_word_embeddings, e], dim=0)
+        unsorted_composed_word_embeddings = composed_word_embeddings[self.unsort_idx, :]
+        if self.use_word_embeddings:
+            word_embeddings = self.word_embeddings(self.vocab_idx)
+            merge = self.merge_weights(self.vocab_idx).expand(self.v_size, word_embeddings.size(1))
+            unsorted_word_embeddings = (merge * unsorted_composed_word_embeddings) + ((1.0 - merge) * word_embeddings)
+        else:
+            unsorted_word_embeddings = unsorted_composed_word_embeddings
+        #print('word_emb called')
         return unsorted_word_embeddings
 
 
