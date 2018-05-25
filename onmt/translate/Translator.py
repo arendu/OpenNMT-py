@@ -129,6 +129,9 @@ class Translator(object):
 
     def translate(self, src_dir, src_path, tgt_path,
                   batch_size, attn_debug=False):
+
+        print(self.model)
+        
         data = onmt.io.build_dataset(self.fields,
                                      self.data_type,
                                      src_path,

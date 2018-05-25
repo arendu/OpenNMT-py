@@ -229,7 +229,7 @@ def make_loss_compute(model, tgt_vocab, opt, train=True):
     return compute
 
 
-def train_model(model, fields, optim, data_type, model_opt):
+def train_model(model, fields, optim, data_type, model_opt, tgt_char_field=None):
     train_loss = make_loss_compute(model, fields["tgt"].vocab, opt)
     valid_loss = make_loss_compute(model, fields["tgt"].vocab, opt,
                                    train=False)
@@ -279,7 +279,7 @@ def train_model(model, fields, optim, data_type, model_opt):
 
         # 5. Drop a checkpoint if needed.
         if epoch >= opt.start_checkpoint_at:
-            trainer.drop_checkpoint(model_opt, epoch, fields, valid_stats)
+            trainer.drop_checkpoint(model_opt, epoch, fields, valid_stats, tgt_char_field)
 
 
 def check_save_model_path():
@@ -486,8 +486,7 @@ def main():
     data_type = first_dataset.data_type
 
     # Load fields generated from preprocess phase.
-    fields, tgt_char_vocab = load_fields(first_dataset, data_type, checkpoint)
-
+    fields, tgt_char_field = load_fields(first_dataset, data_type, checkpoint)
 
     # Report src/tgt features.
     collect_report_features(fields)
@@ -495,7 +494,7 @@ def main():
     # Build model.
     if model_opt.use_char_composition:
         spelling = torch.load(opt.data + '.spelling.pt')
-        model = build_model(model_opt, opt, fields, checkpoint, spelling, tgt_char_vocab)
+        model = build_model(model_opt, opt, fields, checkpoint, spelling, tgt_char_field)
     else:
         model = build_model(model_opt, opt, fields, checkpoint)
     tally_parameters(model)
@@ -505,7 +504,7 @@ def main():
     optim = build_optim(model, checkpoint)
 
     # Do training.
-    train_model(model, fields, optim, data_type, model_opt)
+    train_model(model, fields, optim, data_type, model_opt, tgt_char_field)
 
     # If using tensorboard for logging, close the writer after training.
     if opt.tensorboard:

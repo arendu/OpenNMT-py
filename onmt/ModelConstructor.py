@@ -127,8 +127,8 @@ def load_test_model(opt, dummy_opt):
             model_opt.__dict__[arg] = dummy_opt[arg]
 
     if model_opt.use_char_composition:
-        fields2 = onmt.io.load_fields_from_vocab(torch.load(model_opt.data + '.vocab.pt'), opt.data_type)
-        tgt_char_field = fields2['tgt_char']
+        #fields2 = onmt.io.load_fields_from_vocab(torch.load(model_opt.data + '.vocab.pt'), opt.data_type)
+        tgt_char_field = fields['tgt_char']
         spelling = torch.load(model_opt.data + '.spelling.pt')
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint, spelling, tgt_char_field)
     else:

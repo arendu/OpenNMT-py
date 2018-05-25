@@ -239,7 +239,7 @@ class Trainer(object):
     def epoch_step(self, ppl, epoch):
         return self.optim.update_learning_rate(ppl, epoch)
 
-    def drop_checkpoint(self, opt, epoch, fields, valid_stats):
+    def drop_checkpoint(self, opt, epoch, fields, valid_stats, tgt_char_field=None):
         """ Save a resumable checkpoint.
 
         Args:
@@ -259,6 +259,8 @@ class Trainer(object):
         model_state_dict = {k: v for k, v in model_state_dict.items()
                             if 'generator' not in k}
         generator_state_dict = real_generator.state_dict()
+        # Add tgt_char_field back to fields list
+        fields['tgt_char'] = tgt_char_field
         checkpoint = {
             'model': model_state_dict,
             'generator': generator_state_dict,
