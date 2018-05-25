@@ -132,7 +132,7 @@ def load_test_model(opt, dummy_opt):
         spelling = torch.load(model_opt.data + '.spelling.pt')
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint, spelling, tgt_char_field)
     else:
-        model = make_base_model(model_opt, fields,use_gpu(opt), checkpoint)
+        model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint)
         
     model.eval()
     model.generator.eval()
@@ -176,8 +176,22 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
     # Make decoder.
     tgt_dict = fields["tgt"].vocab
     feature_dicts = onmt.io.collect_feature_vocabs(fields, 'tgt')
-    tgt_embeddings = make_embeddings(model_opt, tgt_dict,
-                                     feature_dicts, for_encoder=False)
+    if model_opt.use_char_composition == 'None':
+        word_representer = None
+    else:
+        word_representer = WordRepresenter(spelling,
+                                           len(tgt_char_field.vocab),
+                                           tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
+                                           model_opt.tgt_word_vec_size,
+                                           char_composition=model_opt.use_char_composition)
+        if gpu:
+            word_representer.init_cuda()
+
+    if model_opt.use_char_composition == 'None':
+        tgt_embeddings = make_embeddings(model_opt, tgt_dict,
+                                         feature_dicts, for_encoder=False)
+    else:
+        tgt_embeddings = VarEmbedding(word_representer, model_opt.tgt_word_vec_size)
 
     # Share the embedding matrix - preprocess with share_vocab required.
     if model_opt.share_embeddings:
@@ -202,14 +216,6 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
                 nn.LogSoftmax(dim=-1))
         else:
             # TODO: make a new generator with VarLinear
-            word_representer = WordRepresenter(spelling,
-                                               len(tgt_char_field.vocab),
-                                               tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
-                                               model_opt.tgt_word_vec_size,
-                                               char_composition=model_opt.use_char_composition)
-            if gpu:
-                word_representer.init_cuda()
-
             generator = nn.Sequential(
                 VarLinear(word_representer),
                 nn.LogSoftmax(dim=-1))
@@ -243,7 +249,7 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
         if hasattr(model.encoder, 'embeddings'):
             model.encoder.embeddings.load_pretrained_vectors(
                     model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)
-        if hasattr(model.decoder, 'embeddings'):
+        if hasattr(model.decoder, 'embeddings') and model_opt.use_char_composition == 'None':
             model.decoder.embeddings.load_pretrained_vectors(
                     model_opt.pre_word_vecs_dec, model_opt.fix_word_vecs_dec)
 
