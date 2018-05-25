@@ -14,10 +14,11 @@ def get_unsort_idx(sort_idx):
 
 class WordRepresenter(nn.Module):
     def __init__(self, spelling, cv_size, cp_idx, we_size,
-                 bidirectional=False, dropout=0.3,
+                 bidirectional=True, dropout=0.3,
                  is_extra_feat_learnable=False,
                  ce_size=50,
-                 cr_size=100,
+                 cr_size=50,
+                 c_rnn_layers=2,
                  char_composition='RNN', pool='Max'):
         super(WordRepresenter, self).__init__()
         self.spelling = spelling
@@ -27,6 +28,7 @@ class WordRepresenter(nn.Module):
         self.we_size = we_size
         self.cv_size = cv_size
         self.cr_size = cr_size
+        self.c_rnn_layers = c_rnn_layers
         self.bidirectional = bidirectional
         self.dropout = dropout
         self.ce_layer = torch.nn.Embedding(self.cv_size, self.ce_size, padding_idx=cp_idx)
@@ -36,22 +38,34 @@ class WordRepresenter(nn.Module):
         char_comp_items = char_composition.split('+')
         self.char_composition = char_comp_items[0]
         if len(char_comp_items) > 1:
-            self.use_word_embeddings = char_comp_items[1].lower() == 'word'
+            self.use_word_embeddings = char_comp_items[1].lower() == ('word')
+            self.use_wordfreq_embeddings = char_comp_items[1].lower() == ('wordfreq')
         else:
             self.use_word_embeddings = False
+            self.use_wordfreq_embeddings = False
         self.pool = pool
-        if self.use_word_embeddings:
+        if self.use_wordfreq_embeddings:
+            print('using wordfreq_embeddings')
+            self.word_embeddings = nn.Embedding(self.v_size, self.we_size)
+            self.freq_wt = nn.Linear(1, 1, bias=False)
+            self.freq_bias = nn.Embedding(self.v_size, 1)
+            self.freq_sig = torch.nn.Sigmoid()
+        elif self.use_word_embeddings:
+            print('using word_embeddings')
             self.word_embeddings = nn.Embedding(self.v_size, self.we_size)
             self.merge_weights = nn.Sequential(
-                                                nn.Embedding(self.v_size, 1),
-                                                torch.nn.Sigmoid()
+                                               nn.Embedding(self.v_size, 1),
+                                               torch.nn.Sigmoid()
                                               )
+        else:
+            pass
+
         if self.char_composition == 'RNN':
-            self.c_rnn = torch.nn.LSTM(self.ce_size, self.cr_size,
+            self.c_rnn = torch.nn.LSTM(input_size=self.ce_size, hidden_size=self.cr_size, num_layers=c_rnn_layers,
                                        bidirectional=bidirectional, batch_first=True,
                                        dropout=self.dropout)
-            if self.cr_size * (2 if bidirectional else 1) != self.we_size:
-                self.c_proj = torch.nn.Linear(self.cr_size * (2 if bidirectional else 1), self.we_size)
+            if self.cr_size * (2 if bidirectional else 1) * self.c_rnn_layers != self.we_size:
+                self.c_proj = torch.nn.Linear(self.cr_size * (2 if bidirectional else 1) * self.c_rnn_layers, self.we_size)
                 print('using Linear c_proj layer')
             else:
                 print('no Linear c_proj layer')
@@ -78,7 +92,18 @@ class WordRepresenter(nn.Module):
             raise BaseException("Unknown seq model")
 
         #self.extra_ce_layer = torch.nn.Embedding(self.v_size, 1)
+        self.register_forward_hook(self.forward_hook)
+        self.register_backward_hook(self.backward_hook)
+        self.prev_unsorted_word_embeddings = None
+        self.hook_released = True
         print('WordRepresenter init complete.')
+
+    def forward_hook(self, *args):
+        pass
+
+    def backward_hook(self, *args):
+        #print('backward_hook called')
+        self.hook_released = True
 
     def init_word2spelling(self,):
         #for v, s in self.word2spelling.items():
@@ -89,6 +114,7 @@ class WordRepresenter(nn.Module):
         lengths = self.spelling[:, -2]
         counts = self.spelling[:, -1].float()
         freqs = counts / counts.sum()
+        freqs = Variable(freqs.unsqueeze(1), requires_grad=False)
         spellings = self.spelling[:, :-2]
         sorted_lengths, sort_idx = torch.sort(lengths, 0, True)
         unsort_idx = get_unsort_idx(sort_idx)
@@ -102,6 +128,7 @@ class WordRepresenter(nn.Module):
         self.sorted_spellings = self.sorted_spellings.cuda()
         self.unsort_idx = self.unsort_idx.cuda()
         self.vocab_idx = self.vocab_idx.cuda()
+        self.freqs = self.freqs.cuda()
 
     def cnn_representer(self, emb):
         # (batch, seq_len, char_emb_size)
@@ -119,9 +146,9 @@ class WordRepresenter(nn.Module):
         output, (ht, ct) = self.c_rnn(packed_emb, None)
         # output, l = unpack(output)
         del output, ct
-        if ht.size(0) == 2:
+        if ht.size(0) % 2 == 0:
             # concat the last ht from fwd RNN and first ht from bwd RNN
-            ht = torch.cat([ht[0, :, :], ht[1, :, :]], dim=1)
+            ht = torch.cat([ht[i, :, :] for i in range(ht.size(0))], dim=1)
         else:
             ht = ht.squeeze()
         if self.c_proj is not None:
@@ -131,25 +158,37 @@ class WordRepresenter(nn.Module):
         return word_embeddings
 
     def forward(self,):
-        emb = self.ce_layer(self.sorted_spellings)
-        if not hasattr(self, 'char_composition'):  # for back compatibility
-            composed_word_embeddings = self.rnn_representer(emb)
-        elif self.char_composition == 'RNN':
-            composed_word_embeddings = self.rnn_representer(emb)
-        elif self.char_composition == 'CNN':
-            composed_word_embeddings = self.cnn_representer(emb)
-        else:
-            raise BaseException("unknown char_composition")
+        #print('word_representer forward call')
+        if self.hook_released:
+            emb = self.ce_layer(self.sorted_spellings)
+            if not hasattr(self, 'char_composition'):  # for back compatibility
+                composed_word_embeddings = self.rnn_representer(emb)
+            elif self.char_composition == 'RNN':
+                composed_word_embeddings = self.rnn_representer(emb)
+            elif self.char_composition == 'CNN':
+                composed_word_embeddings = self.cnn_representer(emb)
+            else:
+                raise BaseException("unknown char_composition")
 
-        unsorted_composed_word_embeddings = composed_word_embeddings[self.unsort_idx, :]
-        if self.use_word_embeddings:
-            word_embeddings = self.word_embeddings(self.vocab_idx)
-            merge = self.merge_weights(self.vocab_idx).expand(self.v_size, word_embeddings.size(1))
-            unsorted_word_embeddings = (merge * unsorted_composed_word_embeddings) + ((1.0 - merge) * word_embeddings)
+            unsorted_composed_word_embeddings = composed_word_embeddings[self.unsort_idx, :]
+            if self.use_wordfreq_embeddings:
+                word_embeddings = self.word_embeddings(self.vocab_idx)
+                merge = self.freq_sig(self.freq_wt(self.freqs) + self.freq_bias(self.vocab_idx))
+                merge = merge.expand(self.v_size, word_embeddings.size(1))
+                unsorted_word_embeddings = (merge * word_embeddings) + ((1.0 - merge) * unsorted_composed_word_embeddings)
+            elif self.use_word_embeddings:
+                word_embeddings = self.word_embeddings(self.vocab_idx)
+                merge = self.merge_weights(self.vocab_idx).expand(self.v_size, word_embeddings.size(1))
+                unsorted_word_embeddings = (merge * word_embeddings) + ((1.0 - merge) * unsorted_composed_word_embeddings)
+            else:
+                unsorted_word_embeddings = unsorted_composed_word_embeddings
+            self.prev_unsorted_word_embeddings = unsorted_word_embeddings
+            #self.hook_released = False
+            #print('computed forward')
+            return unsorted_word_embeddings
         else:
-            unsorted_word_embeddings = unsorted_composed_word_embeddings
-        #print('word_emb called')
-        return unsorted_word_embeddings
+            print('skipped computed forward')
+            return self.prev_unsorted_word_embeddings
 
 
 class VarLinear(nn.Module):
@@ -172,11 +211,13 @@ class VarLinear(nn.Module):
 
 
 class VarEmbedding(nn.Module):
-    def __init__(self, word_representer):
+    def __init__(self, word_representer, tgt_word_vec_size):
         super(VarEmbedding, self).__init__()
         self.word_representer = word_representer
+        self.embedding_size = tgt_word_vec_size
 
     def forward(self, data):
+        data = data.squeeze(dim=2)
         return self.lookup(data)
 
     def lookup(self, data):
