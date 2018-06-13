@@ -87,7 +87,7 @@ def merge_vocabs(vocabs, vocab_size=None):
     """
     merged = sum([vocab.freqs for vocab in vocabs], Counter())
     return torchtext.vocab.Vocab(merged,
-                                 specials=[UNK_WORD, PAD_WORD,
+                                 specials=[PAD_WORD, UNK_WORD,
                                            BOS_WORD, EOS_WORD],
                                  max_size=vocab_size)
 
@@ -219,7 +219,7 @@ def build_dataset(fields, data_type, src_path, tgt_path, src_dir=None,
 
 def _build_field_vocab(field, counter, **kwargs):
     specials = list(OrderedDict.fromkeys(
-        tok for tok in [field.unk_token, field.pad_token, field.init_token,
+        tok for tok in [field.pad_token, field.unk_token, field.init_token,
                         field.eos_token]
         if tok is not None))
     field.vocab = field.vocab_cls(counter, specials=specials, **kwargs)
