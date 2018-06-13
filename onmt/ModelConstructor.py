@@ -16,7 +16,7 @@ from onmt.modules import Embeddings, ImageEncoder, CopyGenerator, \
                          CNNEncoder, CNNDecoder, AudioEncoder
 from onmt.Utils import use_gpu
 from torch.nn.init import xavier_uniform
-from onmt.SpellingModels import VarLinear, VarEmbedding, WordRepresenter
+from onmt.SpellingModels import VarLinear, VarEmbedding, WordRepresenter, VarGenerator
 
 
 def make_embeddings(opt, word_dict, feature_dicts, for_encoder=True):
@@ -133,7 +133,6 @@ def load_test_model(opt, dummy_opt):
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint, spelling, tgt_char_field)
     else:
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint)
-        
     model.eval()
     model.generator.eval()
     return fields, model, model_opt
@@ -214,13 +213,29 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
             generator = nn.Sequential(
                 nn.Linear(model_opt.rnn_size, len(fields["tgt"].vocab)),
                 nn.LogSoftmax(dim=-1))
-        else:
+        elif model_opt.use_char_composition.startswith('RNN'):
+            if model_opt.use_tied_char_composition == 1:
+                generator = VarGenerator(VarLinear(word_representer))
+            else:
+                linear_word_representer = WordRepresenter(spelling,
+                                                   len(tgt_char_field.vocab),
+                                                   tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
+                                                   model_opt.tgt_word_vec_size,
+                                                   char_composition=model_opt.use_char_composition)
+                if gpu:
+                    linear_word_representer.init_cuda()
+                generator = VarGenerator(VarLinear(linear_word_representer))
+
+        elif model_opt.use_char_composition.startswith('CNN'):
             # TODO: make a new generator with VarLinear
             generator = nn.Sequential(
                 VarLinear(word_representer),
                 nn.LogSoftmax(dim=-1))
-            pass
+        else:
+            raise NotImplementedError("unknown use_char_composition")
+
         if model_opt.share_decoder_embeddings:
+            assert model.opt.use_char_composition == 'None'
             generator[0].weight = decoder.embeddings.word_lut.weight
     else:
         generator = CopyGenerator(model_opt.rnn_size,

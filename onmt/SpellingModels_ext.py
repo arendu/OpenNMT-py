@@ -8,10 +8,10 @@ from torch.nn.utils.rnn import pad_packed_sequence as unpack
 import numpy as np
 
 
-class StreamWrapper():
-    def __init__(self, idx, stream):
-        self.idx = idx
-        self.stream = stream
+#class StreamMetadata(torch.cuda.Stream):
+#    def __init__(self, idx):
+#        torch.cuda.Stream.__init__()
+#        self.idx = idx
 
 
 def unique(v, max_lim=0, fill=0):
@@ -120,13 +120,11 @@ class WordRepresenter(nn.Module):
                                                torch.nn.Sigmoid()
                                               )
         elif self.use_wordgate_embeddings:
-            print('using wordgate_embeddings')
             self.word_embeddings = nn.Embedding(self.v_size, self.we_size)
             self.merge_weights = nn.Sequential(
                                                nn.Embedding(self.v_size, self.we_size),
                                                torch.nn.Sigmoid()
                                               )
-        else:
             pass
 
         if self.char_composition == 'RNN':
@@ -140,12 +138,12 @@ class WordRepresenter(nn.Module):
                 print('no Linear c_proj layer')
                 self.c_proj = None
         elif self.char_composition == 'CNN':
+            assert self.we_size % 4 == 0
             kernals = [3, 4, 5, 6]
-            assert self.we_size % len(kernals) == 0
             cnns = []
             for k in kernals:
                 seq = nn.Sequential(
-                    nn.Conv1d(self.ce_size, self.we_size // len(kernals), k, padding=cp_idx),
+                    nn.Conv1d(self.ce_size, self.we_size // 4, k, padding=cp_idx),
                     nn.Tanh(),
                     nn.MaxPool1d(self.spellings.size(1) - k + 1)
                     )
@@ -217,34 +215,12 @@ class WordRepresenter(nn.Module):
         # m_5g = self.max_5g(nn.functional.tanh(self.c1d_5g(emb))).squeeze()
         # m_6g = self.max_6g(nn.functional.tanh(self.c1d_6g(emb))).squeeze()
         #stream_tmp = []
-        #streams = [(idx, torch.cuda.Stream()) for idx, cnn in enumerate(self.cnns)]
-        #wrapped_stream = [StreamWrapper(idx, s) for idx, s in streams]
-        #print(torch.cuda.current_device())
-        #with torch.cuda.stream(wrapped_stream[0].stream):
-        #    print('start stream 0')
-        #    cnn = self.cnns[wrapped_stream[0].idx]
-        #    stream_tmp.append((wrapped_stream[0].idx, cnn(emb).squeeze()))
-        #    print('end stream 0')
-        ##torch.cuda.synchronize()
-        #with torch.cuda.stream(wrapped_stream[1].stream):
-        #    print('start stream 1')
-        #    cnn = self.cnns[wrapped_stream[1].idx]
-        #    stream_tmp.append((wrapped_stream[1].idx, cnn(emb).squeeze()))
-        #    print('end stream 1')
-        ##torch.cuda.synchronize()
-        #with torch.cuda.stream(wrapped_stream[2].stream):
-        #    print('start stream 2')
-        #    cnn = self.cnns[wrapped_stream[2].idx]
-        #    stream_tmp.append((wrapped_stream[2].idx, cnn(emb).squeeze()))
-        #    print('end stream 2')
-        ##torch.cuda.synchronize()
-        #with torch.cuda.stream(wrapped_stream[3].stream):
-        #    print('start stream 3')
-        #    cnn = self.cnns[wrapped_stream[3].idx]
-        #    stream_tmp.append((wrapped_stream[3].idx, cnn(emb).squeeze()))
-        #    print('end stream 3')
+        #streams = [StreamMetadata(idx) for idx, cnn in enumerate(self.cnns)]
+        #for s in streams:
+        #    with torch.cuda.stream(s):
+        #        cnn = self.cnns[s.idx]
+        #        stream_tmp.append((s.idx, cnn(emb).squeeze()))
         #torch.cuda.synchronize()
-        #assert len(stream_tmp) == 4
         #stream_tmp = [t for idx, t in sorted(stream_tmp)]
         #word_embeddings_stream = torch.cat(stream_tmp, dim=1)
         tmp = [_cnn(emb).squeeze() for _cnn in self.cnns]
@@ -345,7 +321,6 @@ class WordRepresenter(nn.Module):
             unsorted_word_embeddings = (merge * word_embeddings) + ((1.0 - merge) * unsorted_composed_word_embeddings)
         elif self.use_wordgate_embeddings:
             word_embeddings = self.word_embeddings(selected_vocab_idx)
-            merge = self.merge_weights(selected_vocab_idx)
             unsorted_word_embeddings = (merge * word_embeddings) + ((1.0 - merge) * unsorted_composed_word_embeddings)
         else:
             unsorted_word_embeddings = unsorted_composed_word_embeddings

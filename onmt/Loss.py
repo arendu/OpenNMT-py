@@ -11,6 +11,9 @@ from torch.autograd import Variable
 
 import onmt
 import onmt.io
+from onmt.SpellingModels import VarGenerator, unique
+
+import pdb
 
 
 class LossComputeBase(nn.Module):
@@ -37,6 +40,7 @@ class LossComputeBase(nn.Module):
         self.generator = generator
         self.tgt_vocab = tgt_vocab
         self.padding_idx = tgt_vocab.stoi[onmt.io.PAD_WORD]
+        assert self.padding_idx == 0
 
     def _make_shard_state(self, batch, output, range_, attns=None):
         """
@@ -65,7 +69,7 @@ class LossComputeBase(nn.Module):
         """
         return NotImplementedError
 
-    def monolithic_compute_loss(self, batch, output, attns):
+    def monolithic_compute_loss(self, batch, output, attns, do_back_prop=False):
         """
         Compute the forward loss for the batch.
 
@@ -81,7 +85,9 @@ class LossComputeBase(nn.Module):
         """
         range_ = (0, batch.tgt.size(0))
         shard_state = self._make_shard_state(batch, output, range_, attns)
-        _, batch_stats = self._compute_loss(batch, **shard_state)
+        loss, batch_stats = self._compute_loss(batch, **shard_state)
+        if do_back_prop:
+            loss.div(batch.src[0].size(1)).backward()
 
         return batch_stats
 
@@ -155,7 +161,7 @@ class NMTLossCompute(LossComputeBase):
     Standard NMT Loss Computation.
     """
     def __init__(self, generator, tgt_vocab, normalization="sents",
-                 label_smoothing=0.0):
+                 label_smoothing=0.0, fill=0):
         super(NMTLossCompute, self).__init__(generator, tgt_vocab)
         assert (label_smoothing >= 0.0 and label_smoothing <= 1.0)
         if label_smoothing > 0:
@@ -171,9 +177,11 @@ class NMTLossCompute(LossComputeBase):
             one_hot[0][self.padding_idx] = 0
             self.register_buffer('one_hot', one_hot)
         else:
-            weight = torch.ones(len(tgt_vocab))
-            weight[self.padding_idx] = 0
-            self.criterion = nn.NLLLoss(weight, size_average=False)
+            # weight = torch.ones(len(tgt_vocab))
+            # weight[self.padding_idx] = 0
+            assert self.padding_idx == 0
+            self.fill = fill
+            self.criterion = nn.NLLLoss(size_average=False, ignore_index=self.padding_idx)
         self.confidence = 1.0 - label_smoothing
 
     def _make_shard_state(self, batch, output, range_, attns=None):
@@ -183,7 +191,20 @@ class NMTLossCompute(LossComputeBase):
         }
 
     def _compute_loss(self, batch, output, target):
-        scores = self.generator(self._bottle(output))
+        if isinstance(self.generator, VarGenerator):
+            if self.generator.training:
+                target_u, u_dict = unique(target, max_lim=len(self.tgt_vocab), fill=self.fill)
+                if self.fill > 0:
+                    assert target_u.size(0) >= self.fill
+                #target_u = torch.arange(len(self.tgt_vocab)).type_as(target_u)
+                scores = self.generator(self._bottle(output), target_u)
+                target_map = Variable(torch.Tensor([u_dict[i] for i in target.data.view(-1)]).type_as(target.data))
+                target = target_map.view(target.shape)
+            else:
+                # vocab_idx = torch.arange(len(self.tgt_vocab)).type_as(target)
+                scores = self.generator(self._bottle(output), None)
+        else:
+            scores = self.generator(self._bottle(output))
 
         gtruth = target.view(-1)
         if self.confidence < 1:
@@ -263,3 +284,12 @@ def shards(state, shard_size, eval=False):
                      if isinstance(v, Variable) and v.grad is not None)
         inputs, grads = zip(*variables)
         torch.autograd.backward(inputs, grads)
+
+
+class SelectTgtVocabLoss(nn.Module):
+    def __init__(self, padding_idx, weight=None):
+        assert padding_idx == 0  # we need padding to be zero for the vocabulary filtering during training
+        self.padding_idx = padding_idx
+        self.weight = weight
+        self.nll_loss = nn.NLLLoss(self.weight, size_average=False)
+

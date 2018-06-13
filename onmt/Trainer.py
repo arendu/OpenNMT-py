@@ -226,7 +226,7 @@ class Trainer(object):
 
             # Compute loss.
             batch_stats = self.valid_loss.monolithic_compute_loss(
-                    batch, outputs, attns)
+                    batch, outputs, attns, do_back_prop=False)
 
             # Update statistics.
             stats.update(batch_stats)
@@ -306,6 +306,11 @@ class Trainer(object):
                     self.model(src, tgt, src_lengths, dec_state)
 
                 # 3. Compute loss in shards for memory efficiency.
+                #import pdb
+                #pdb.set_trace()
+                #batch_stats = self.train_loss.monolithic_compute_loss(
+                #        batch, outputs, attns, do_back_prop=True)
+
                 batch_stats = self.train_loss.sharded_compute_loss(
                         batch, outputs, attns, j,
                         trunc_size, self.shard_size, normalization)

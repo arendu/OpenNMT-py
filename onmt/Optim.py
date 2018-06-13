@@ -50,7 +50,8 @@ class Optim(object):
                  adagrad_accum=0.0,
                  decay_method=None,
                  warmup_steps=4000,
-                 model_size=None):
+                 model_size=None,
+                 min_lr=0.001):
         self.last_ppl = None
         self.lr = lr
         self.original_lr = lr
@@ -65,6 +66,7 @@ class Optim(object):
         self.decay_method = decay_method
         self.warmup_steps = warmup_steps
         self.model_size = model_size
+        self.min_lr = min_lr
 
     def set_parameters(self, params):
         self.params = []
@@ -138,6 +140,7 @@ class Optim(object):
 
         if self.start_decay:
             self.lr = self.lr * self.lr_decay
+            self.lr = max(self.min_lr, self.lr)
             print("Decaying learning rate to %g" % self.lr)
 
         self.last_ppl = ppl

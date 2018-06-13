@@ -17,8 +17,14 @@ def model_opts(parser):
     group.add_argument('-word_vec_size', type=int, default=-1,
                        help='Word embedding size for src and tgt.')
     group.add_argument('-use_char_composition', type=str,
-                       default='None', choices=set(['CNN', 'RNN', 'CNN+Word', 'RNN+Word', 'None', 'CNN+WordFreq', 'RNN+WordFreq']),
+                       default='None', choices=set(['CNN', 'RNN', 'CNN+Word', 'RNN+Word', 'None', 'CNN+Wordgate']),
                        help='use char_composition.')
+    group.add_argument('-use_tied_char_composition', type=int,
+                       default=1, choices=set([1, 0]),
+                       help='tied the rnn/cnn params')
+    group.add_argument('-target_fill', type=int,
+                       default=0, choices=range(0, 8001),
+                       help='tied the rnn/cnn params')
 
     group.add_argument('-share_decoder_embeddings', action='store_true',
                        help="""Use a shared weight matrix for the input and
@@ -53,7 +59,7 @@ def model_opts(parser):
                        the system to incorporate non-text inputs.
                        Options are [text|img|audio].""")
 
-    group.add_argument('-encoder_type', type=str, default='rnn',
+    group.add_argument('-encoder_type', type=str, default='brnn',
                        choices=['rnn', 'brnn', 'mean', 'transformer', 'cnn'],
                        help="""Type of encoder layer to use. Non-RNN layers
                        are experimental. Options are
@@ -286,7 +292,7 @@ def train_opts(parser):
                        help="""Maximum batches of words in a sequence to run
                         the generator on in parallel. Higher is faster, but
                         uses more memory.""")
-    group.add_argument('-epochs', type=int, default=13,
+    group.add_argument('-epochs', type=int, default=20,
                        help='Number of training epochs')
     group.add_argument('-optim', default='sgd',
                        choices=['sgd', 'adagrad', 'adadelta', 'adam',
@@ -414,7 +420,7 @@ def translate_opts(parser):
                        help='Beam size')
     group.add_argument('-min_length', type=int, default=0,
                        help='Minimum prediction length')
-    group.add_argument('-max_length', type=int, default=100,
+    group.add_argument('-max_length', type=int, default=1000,
                        help='Maximum prediction length.')
     group.add_argument('-max_sent_length', action=DeprecateAction,
                        help="Deprecated, use `-max_length` instead")
