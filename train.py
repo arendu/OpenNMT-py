@@ -53,6 +53,9 @@ if torch.cuda.is_available() and not opt.gpuid:
 
 if opt.gpuid:
     cuda.set_device(opt.gpuid[0])
+    tmp = torch.ByteTensor([0])
+    tmp.cuda()
+    print("using GPU", opt.gpuid[0])
     if opt.seed > 0:
         torch.cuda.manual_seed(opt.seed)
 
@@ -221,7 +224,7 @@ def make_loss_compute(model, tgt_vocab, opt, train=True):
     else:
         compute = onmt.Loss.NMTLossCompute(
             model.generator, tgt_vocab,
-            label_smoothing=opt.label_smoothing if train else 0.0)
+            label_smoothing=opt.label_smoothing if train else 0.0, fill=opt.target_fill)
 
     if use_gpu(opt):
         compute.cuda()
@@ -468,6 +471,16 @@ def show_optimizer_state(optim):
 
 
 def main():
+    print('pid:' + str(os.getpid()))
+    print(opt)
+    #if opt.gpuid[0] > -1:
+    #    torch.cuda.set_device(opt.gpuid[0])
+    #    tmp = torch.ByteTensor([0])
+    #    tmp.cuda()
+    #    print("using GPU", opt.gpuid[0])
+    #else:
+    #    print("using CPU")
+
     # Load checkpoint if we resume from a previous training.
     if opt.train_from:
         print('Loading checkpoint from %s' % opt.train_from)
