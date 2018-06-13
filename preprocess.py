@@ -179,7 +179,7 @@ def build_save_spelling(fields, opt, max_word_size):
 
     spelling = torch.LongTensor(len(fields['tgt'].vocab), max_word_size+2).fill_(fields['tgt_char'].vocab.stoi[PAD_WORD])
 
-    specials = [UNK_WORD, PAD_WORD, BOS_WORD, EOS_WORD]
+    specials = [PAD_WORD, UNK_WORD, BOS_WORD, EOS_WORD]
 
     for word in fields['tgt'].vocab.stoi:
         w = fields['tgt'].vocab.stoi[word]
