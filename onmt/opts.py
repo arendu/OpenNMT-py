@@ -25,6 +25,9 @@ def model_opts(parser):
     group.add_argument('-target_fill', type=int,
                        default=0, choices=range(0, 8001),
                        help='tied the rnn/cnn params')
+    group.add_argument('-kernals', type=str,
+                       default='3456', choices=set(['3456', '36', '25', '6']),
+                       help='number and size of kernals to use in CNN')
 
     group.add_argument('-share_decoder_embeddings', action='store_true',
                        help="""Use a shared weight matrix for the input and

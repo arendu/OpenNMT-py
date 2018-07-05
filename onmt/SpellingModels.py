@@ -6,6 +6,7 @@ from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 import numpy as np
+import pdb
 
 
 class StreamWrapper():
@@ -78,7 +79,7 @@ class WordRepresenter(nn.Module):
                  ce_size=50,
                  cr_size=250,
                  c_rnn_layers=1,
-                 char_composition='RNN', pool='Max'):
+                 char_composition='RNN', pool='Max', kernals='3456'):
         super(WordRepresenter, self).__init__()
         self.spelling_matrix = spelling_matrix
         # self.spellings, self.sorted_spellings, self.sorted_spell_lens, self.spell_lens, self.unsort_idx, self.freqs = self.init_word2spelling()
@@ -140,7 +141,7 @@ class WordRepresenter(nn.Module):
                 print('no Linear c_proj layer')
                 self.c_proj = None
         elif self.char_composition == 'CNN':
-            kernals = [3, 4, 5, 6]
+            kernals = [int(i) for i in kernals]
             assert self.we_size % len(kernals) == 0
             cnns = []
             for k in kernals:
