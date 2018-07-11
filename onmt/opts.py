@@ -153,7 +153,8 @@ def preprocess_opts(parser):
 
     group.add_argument('-save_data', required=True,
                        help="Output file for the prepared data")
-
+    group.add_argument('-spelling_len_percentile', required=False, type=int, default=99,
+                       help='max length for char seq')
     group.add_argument('-max_shard_size', type=int, default=0,
                        help="""For text corpus of large volume, it will
                        be divided into shards of this size to preprocess.
@@ -289,7 +290,7 @@ def train_opts(parser):
                        Approximately equivalent to updating
                        batch_size * accum_count batches at once.
                        Recommended for Transformer.""")
-    group.add_argument('-valid_batch_size', type=int, default=32,
+    group.add_argument('-valid_batch_size', type=int, default=16,
                        help='Maximum batch size for validation')
     group.add_argument('-max_generator_batches', type=int, default=32,
                        help="""Maximum batches of words in a sequence to run

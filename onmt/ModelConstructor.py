@@ -183,7 +183,8 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
                                            tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
                                            model_opt.tgt_word_vec_size,
                                            char_composition=model_opt.use_char_composition,
-                                           kernals=model_opt.kernals)
+                                           kernals=model_opt.kernals,
+                                           rnn_size=model_opt.rnn_size)
         if gpu:
             word_representer.init_cuda()
 
@@ -223,7 +224,8 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
                                                    tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
                                                    model_opt.tgt_word_vec_size,
                                                    char_composition=model_opt.use_char_composition,
-                                                   kernals=model_opt.kernals)
+                                                   kernals=model_opt.kernals,
+                                                   rnn_size=model_opt.rnn_size)
                 if gpu:
                     linear_word_representer.init_cuda()
                 generator = VarGenerator(VarLinear(linear_word_representer))

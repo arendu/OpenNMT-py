@@ -73,13 +73,15 @@ class HighwayNetwork(nn.Module):
 
 
 class WordRepresenter(nn.Module):
-    def __init__(self, spelling_matrix, cv_size, cp_idx, we_size,
+    def __init__(self, spelling_matrix, cv_size, cp_idx, we_size, rnn_size,
                  bidirectional=True, dropout=0.3,
                  is_extra_feat_learnable=False,
                  ce_size=50,
                  cr_size=250,
                  c_rnn_layers=1,
-                 char_composition='RNN', pool='Max', kernals='3456'):
+                 char_composition='RNN',
+                 pool='Max',
+                 kernals='3456'):
         super(WordRepresenter, self).__init__()
         self.spelling_matrix = spelling_matrix
         # self.spellings, self.sorted_spellings, self.sorted_spell_lens, self.spell_lens, self.unsort_idx, self.freqs = self.init_word2spelling()
@@ -87,6 +89,7 @@ class WordRepresenter(nn.Module):
         self.v_size = len(self.spelling_lengths)
         self.ce_size = ce_size
         self.we_size = we_size
+        self.rnn_size = rnn_size
         self.cv_size = cv_size
         self.cr_size = cr_size
         self.c_rnn_layers = c_rnn_layers
@@ -98,6 +101,11 @@ class WordRepresenter(nn.Module):
             torch.FloatTensor(self.cv_size, self.ce_size).uniform_(-0.5 / self.ce_size, 0.5 / self.ce_size))
         char_comp_items = char_composition.split('+')
         self.char_composition = char_comp_items[0]
+        if self.rnn_size != self.we_size:
+            self.proj = torch.nn.Linear(self.we_size, self.rnn_size)
+        else:
+            self.proj = None
+
         if len(char_comp_items) > 1:
             self.use_word_embeddings = char_comp_items[1].lower() == ('word')
             self.use_wordgate_embeddings = char_comp_items[1].lower() == ('wordgate')
@@ -209,6 +217,8 @@ class WordRepresenter(nn.Module):
         # self.unsort_idx = self.unsort_idx.cuda()
         self.vocab_idx = self.vocab_idx.cuda()
         self.freqs = self.freqs.cuda()
+        if self.proj is not None:
+            self.proj = self.proj.cuda()
 
     def cnn_representer(self, emb):
         # (batch, seq_len, char_emb_size)
@@ -352,6 +362,7 @@ class WordRepresenter(nn.Module):
             unsorted_word_embeddings = unsorted_composed_word_embeddings
         return unsorted_word_embeddings
 
+
 class VarLinear(nn.Module):
     def __init__(self, word_representer):
         super(VarLinear, self).__init__()
@@ -362,8 +373,9 @@ class VarLinear(nn.Module):
         var = self.word_representer(tgt_select)
         # shape of var is (vocab_size, hidden_size)
         if data.dim() > 1:
-            assert data.size(-1) == var.size(-1)
-            return torch.matmul(data, var.transpose(0, 1))
+            var_proj = var if self.word_representer.proj is None else self.word_representer.proj(var)
+            assert data.size(-1) == var_proj.size(-1)
+            return torch.matmul(data, var_proj.transpose(0, 1))
         else:
             raise BaseException("data should be at least 2 dimensional")
 
