@@ -351,6 +351,8 @@ def train_opts(parser):
                        this much if (i) perplexity does not decrease on the
                        validation set or (ii) epoch has gone past
                        start_decay_at""")
+    group.add_argument('-min_learning_rate', type=float, default=0.0,
+                       help='min_learning_rate')
     group.add_argument('-start_decay_at', type=int, default=8,
                        help="""Start decaying every epoch after and including this
                        epoch""")
