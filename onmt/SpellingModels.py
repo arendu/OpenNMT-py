@@ -77,7 +77,7 @@ class WordRepresenter(nn.Module):
                  bidirectional=True, dropout=0.3,
                  is_extra_feat_learnable=False,
                  ce_size=50,
-                 cr_size=250,
+                 cr_size=100,
                  c_rnn_layers=1,
                  char_composition='RNN',
                  pool='Max',
@@ -101,6 +101,7 @@ class WordRepresenter(nn.Module):
             torch.FloatTensor(self.cv_size, self.ce_size).uniform_(-0.5 / self.ce_size, 0.5 / self.ce_size))
         char_comp_items = char_composition.split('+')
         self.char_composition = char_comp_items[0]
+        self.cached = None
         if self.rnn_size != self.we_size:
             self.proj = torch.nn.Linear(self.we_size, self.rnn_size)
         else:
@@ -126,6 +127,7 @@ class WordRepresenter(nn.Module):
             self.word_embeddings = nn.Embedding(self.v_size, self.we_size)
             self.merge_weights = nn.Sequential(
                                                nn.Embedding(self.v_size, 1),
+                                               nn.Dropout(0.2),
                                                torch.nn.Sigmoid()
                                               )
         elif self.use_wordgate_embeddings:
@@ -133,6 +135,7 @@ class WordRepresenter(nn.Module):
             self.word_embeddings = nn.Embedding(self.v_size, self.we_size)
             self.merge_weights = nn.Sequential(
                                                nn.Embedding(self.v_size, self.we_size),
+                                               nn.Dropout(0.2),
                                                torch.nn.Sigmoid()
                                               )
         else:
@@ -328,6 +331,20 @@ class WordRepresenter(nn.Module):
                 word_embeddings = self.precomputed_word_embeddings
         return word_embeddings
 
+    def forward_parts(self,):
+        if self.cached is not None:
+            return self.cached
+        else:
+            unsorted_word_embeddings = []
+            for tgt_part in torch.split(self.vocab_idx.data, self.v_size // 10):
+                emb_part = self(tgt_part)
+                emb_part = emb_part.detach()
+                unsorted_word_embeddings.append(emb_part)
+            unsorted_word_embeddings = torch.cat(unsorted_word_embeddings, dim=0)
+            print('done using parts')
+            self.cached = unsorted_word_embeddings
+            return unsorted_word_embeddings
+
     def forward(self, tgt_select=None):
         # print('word_representer forward call')
         if tgt_select is None:
@@ -345,7 +362,7 @@ class WordRepresenter(nn.Module):
         else:
             raise BaseException("unknown char_composition")
 
-        #unsorted_composed_word_embeddings = composed_word_embeddings[self.unsort_idx, :]
+        # unsorted_composed_word_embeddings = composed_word_embeddings[self.unsort_idx, :]
         unsorted_composed_word_embeddings = composed_word_embeddings
 
         if self.use_wordfreq_embeddings:
@@ -370,7 +387,11 @@ class VarLinear(nn.Module):
 
     def matmul(self, data, tgt_select):
         # shape of data (bs,  seq_len, hidden_size)
-        var = self.word_representer(tgt_select)
+        if self.training:
+            self.word_representer.cached = None
+            var = self.word_representer(tgt_select)
+        else:
+            var = self.word_representer.forward_parts()
         # shape of var is (vocab_size, hidden_size)
         if data.dim() > 1:
             var_proj = var if self.word_representer.proj is None else self.word_representer.proj(var)
@@ -391,12 +412,14 @@ class VarEmbedding(nn.Module):
 
     def lookup(self, data):
         if self.training:
+            self.word_representer.cached = None
             data_u, u_dict = unique(data)
             data_map = Variable(torch.Tensor([u_dict[i] for i in data.data.view(-1)]).type_as(data.data))
             data = data_map.view(data.shape)
             var = self.word_representer(data_u)
         else:
-            var = self.word_representer(None)
+            # var = self.word_representer(None)
+            var = self.word_representer.forward_parts()
         embedding_size = var.size(1)
         if data.dim() == 2:
             batch_size = data.size(0)

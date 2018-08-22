@@ -1,6 +1,11 @@
 import argparse
 from onmt.modules.SRU import CheckSRU
 
+def fill_type(x):
+    x = int(x)
+    if x > 30000:
+        raise argparse.ArgumentTypeError("Max fill is 30K")
+    return x
 
 def model_opts(parser):
     """
@@ -17,14 +22,18 @@ def model_opts(parser):
     group.add_argument('-word_vec_size', type=int, default=-1,
                        help='Word embedding size for src and tgt.')
     group.add_argument('-use_char_composition', type=str,
-                       default='None', choices=set(['CNN', 'RNN', 'CNN+Word', 'RNN+Word', 'None', 'CNN+Wordgate']),
+                       default='None', choices=set(['CNN', 'RNN', 'CNN+Word', 'RNN+Word', 'None', 'CNN+Wordgate', 'RNN+Wordgate']),
                        help='use char_composition.')
+    group.add_argument('-use_char_for', choices=set(['both', 'embedding', 'softmax']),
+                       default='both',
+                       help='where to use char composition functionality in the decoder')
     group.add_argument('-use_tied_char_composition', type=int,
                        default=1, choices=set([1, 0]),
                        help='tied the rnn/cnn params')
-    group.add_argument('-target_fill', type=int,
-                       default=0, choices=range(0, 8001),
-                       help='tied the rnn/cnn params')
+    group.add_argument('-target_fill', type=fill_type,
+                       default=0, help='num random tgt vocab to include in softmax layer')
+    group.add_argument('-use_batch_tgt_vocab', type=int, choices=set([0, 1]),
+                       default=0, help='if set, softmax layer only uses vocabs from current batch')
     group.add_argument('-kernals', type=str,
                        default='3456', choices=set(['3456', '36', '25', '6']),
                        help='number and size of kernals to use in CNN')
@@ -153,7 +162,7 @@ def preprocess_opts(parser):
 
     group.add_argument('-save_data', required=True,
                        help="Output file for the prepared data")
-    group.add_argument('-spelling_len_percentile', required=False, type=int, default=99,
+    group.add_argument('-spelling_len_percentile', required=False, type=int, default=95,
                        help='max length for char seq')
     group.add_argument('-max_shard_size', type=int, default=0,
                        help="""For text corpus of large volume, it will
@@ -173,9 +182,9 @@ def preprocess_opts(parser):
                        one word per line.""")
     group.add_argument('-features_vocabs_prefix', type=str, default='',
                        help="Path prefix to existing features vocabularies")
-    group.add_argument('-src_vocab_size', type=int, default=50000,
+    group.add_argument('-src_vocab_size', type=int, default=200000,
                        help="Size of the source vocabulary")
-    group.add_argument('-tgt_vocab_size', type=int, default=50000,
+    group.add_argument('-tgt_vocab_size', type=int, default=200000,
                        help="Size of the target vocabulary")
 
     group.add_argument('-src_words_min_frequency', type=int, default=0)
@@ -188,11 +197,11 @@ def preprocess_opts(parser):
 
     # Truncation options, for text corpus
     group = parser.add_argument_group('Pruning')
-    group.add_argument('-src_seq_length', type=int, default=50,
+    group.add_argument('-src_seq_length', type=int, default=10000,
                        help="Maximum source sequence length")
     group.add_argument('-src_seq_length_trunc', type=int, default=0,
                        help="Truncate source sequence length.")
-    group.add_argument('-tgt_seq_length', type=int, default=50,
+    group.add_argument('-tgt_seq_length', type=int, default=10000,
                        help="Maximum target sequence length to keep.")
     group.add_argument('-tgt_seq_length_trunc', type=int, default=0,
                        help="Truncate target sequence length.")
@@ -290,7 +299,7 @@ def train_opts(parser):
                        Approximately equivalent to updating
                        batch_size * accum_count batches at once.
                        Recommended for Transformer.""")
-    group.add_argument('-valid_batch_size', type=int, default=16,
+    group.add_argument('-valid_batch_size', type=int, default=64,
                        help='Maximum batch size for validation')
     group.add_argument('-max_generator_batches', type=int, default=32,
                        help="""Maximum batches of words in a sequence to run

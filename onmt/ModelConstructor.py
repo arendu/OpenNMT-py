@@ -188,11 +188,13 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
         if gpu:
             word_representer.init_cuda()
 
-    if model_opt.use_char_composition == 'None':
+    #if model_opt.use_char_composition == 'None' or model_opt.use_char_for == 'embeddings':
+    if word_representer is None:
         tgt_embeddings = make_embeddings(model_opt, tgt_dict,
                                          feature_dicts, for_encoder=False)
     else:
         tgt_embeddings = VarEmbedding(word_representer, model_opt.tgt_word_vec_size)
+
 
     # Share the embedding matrix - preprocess with share_vocab required.
     if model_opt.share_embeddings:
@@ -211,30 +213,39 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
 
     # Make Generator.
     if not model_opt.copy_attn:
+        if model_opt.use_tied_char_composition == 1:
+            print('using tied word_representer')
+            linear_word_representer = word_representer
+        else:
+            linear_word_representer = WordRepresenter(spelling,
+                                               len(tgt_char_field.vocab),
+                                               tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
+                                               model_opt.tgt_word_vec_size,
+                                               char_composition=model_opt.use_char_composition,
+                                               kernals=model_opt.kernals,
+                                               rnn_size=model_opt.rnn_size)
+            if gpu:
+                linear_word_representer.init_cuda()
+
         if model_opt.use_char_composition == 'None':
             generator = nn.Sequential(
                 nn.Linear(model_opt.rnn_size, len(fields["tgt"].vocab)),
                 nn.LogSoftmax(dim=-1))
         elif model_opt.use_char_composition.startswith('RNN'):
-            if model_opt.use_tied_char_composition == 1:
-                generator = VarGenerator(VarLinear(word_representer))
-            else:
-                linear_word_representer = WordRepresenter(spelling,
-                                                   len(tgt_char_field.vocab),
-                                                   tgt_char_field.vocab.stoi[onmt.io.PAD_WORD],
-                                                   model_opt.tgt_word_vec_size,
-                                                   char_composition=model_opt.use_char_composition,
-                                                   kernals=model_opt.kernals,
-                                                   rnn_size=model_opt.rnn_size)
-                if gpu:
-                    linear_word_representer.init_cuda()
+            if model_opt.use_batch_tgt_vocab == 1:
                 generator = VarGenerator(VarLinear(linear_word_representer))
+            else:
+                generator = nn.Sequential(
+                   VarLinear(linear_word_representer),
+                   nn.LogSoftmax(dim=-1))
 
         elif model_opt.use_char_composition.startswith('CNN'):
-            # TODO: make a new generator with VarLinear
-            generator = nn.Sequential(
-                VarLinear(word_representer),
-                nn.LogSoftmax(dim=-1))
+            if model_opt.use_batch_tgt_vocab == 1:
+                generator = VarGenerator(VarLinear(linear_word_representer))
+            else:
+                generator = nn.Sequential(
+                   VarLinear(linear_word_representer),
+                   nn.LogSoftmax(dim=-1))
         else:
             raise NotImplementedError("unknown use_char_composition")
 
