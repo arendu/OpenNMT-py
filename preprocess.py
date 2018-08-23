@@ -256,10 +256,10 @@ def main():
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)
     word_sizes = [len(w) + 2 for w in fields['tgt'].vocab.stoi]
-    max_word_size = int(np.percentile(word_sizes, 95))
+    max_word_size = int(np.percentile(word_sizes, 99))
     print(max_word_size)
     src_word_sizes = [len(w) + 2 for w in fields['src'].vocab.stoi]
-    src_max_word_size = int(np.percentile(word_sizes, 95))
+    src_max_word_size = int(np.percentile(word_sizes, 99))
     print(src_max_word_size)
 
     build_save_spelling(fields, opt, max_word_size, src_max_word_size)
