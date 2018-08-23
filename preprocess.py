@@ -176,7 +176,6 @@ def build_save_vocab(train_dataset, fields, opt):
 
 
 def build_save_spelling(fields, opt, max_word_size, src_max_word_size):
-    src_max_word_size = max_word_size
     specials = [PAD_WORD, UNK_WORD, BOS_WORD, EOS_WORD]
     src_spelling = torch.LongTensor(len(fields['src'].vocab), src_max_word_size+2).fill_(fields['src_char'].vocab.stoi[PAD_WORD])
 
@@ -184,10 +183,10 @@ def build_save_spelling(fields, opt, max_word_size, src_max_word_size):
         w = fields['src'].vocab.stoi[word]
 
         vec_c = [fields['src_char'].vocab.stoi[BOS_CHAR]] + \
-                [fields['src_char'].vocab.stoi[char] for char in ([word] if word in specials else word)][:max_word_size - 2] + \
+                [fields['src_char'].vocab.stoi[char] for char in ([word] if word in specials else word)][:src_max_word_size - 2] + \
                 [fields['src_char'].vocab.stoi[EOS_CHAR]]
         len_word = len(vec_c)
-        vec_c += [fields['src_char'].vocab.stoi[PAD_WORD]] * (max_word_size - len(vec_c))
+        vec_c += [fields['src_char'].vocab.stoi[PAD_WORD]] * (src_max_word_size - len(vec_c))
         vec_c += [len_word]
         vec_c += [fields['src'].vocab.freqs[word]]
         src_spelling[w, :] = torch.LongTensor(vec_c)
@@ -257,10 +256,13 @@ def main():
     print("Building & saving validation data...")
     build_save_dataset('valid', fields, opt)
     word_sizes = [len(w) + 2 for w in fields['tgt'].vocab.stoi]
-    max_word_size = int(np.percentile(word_sizes, 99))
+    max_word_size = int(np.percentile(word_sizes, 95))
     print(max_word_size)
+    src_word_sizes = [len(w) + 2 for w in fields['src'].vocab.stoi]
+    src_max_word_size = int(np.percentile(word_sizes, 95))
+    print(src_max_word_size)
 
-    build_save_spelling(fields, opt, max_word_size)
+    build_save_spelling(fields, opt, max_word_size, src_max_word_size)
 
 
 if __name__ == "__main__":
