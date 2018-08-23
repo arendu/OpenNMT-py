@@ -27,6 +27,8 @@ def model_opts(parser):
     group.add_argument('-use_char_for', choices=set(['both', 'embedding', 'softmax']),
                        default='both',
                        help='where to use char composition functionality in the decoder')
+    group.add_argument('-use_src_char_comp', choices=set([0, 1]), type=int, default=0,
+                       help='use the char composition mechanism for src side')
     group.add_argument('-use_tied_char_composition', type=int,
                        default=1, choices=set([1, 0]),
                        help='tied the rnn/cnn params')

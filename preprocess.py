@@ -175,11 +175,39 @@ def build_save_vocab(train_dataset, fields, opt):
     torch.save(onmt.io.save_fields_to_vocab(fields), vocab_file)
 
 
-def build_save_spelling(fields, opt, max_word_size):
+def build_save_spelling(fields, opt, max_word_size, src_max_word_size):
+    src_max_word_size = max_word_size
+    specials = [PAD_WORD, UNK_WORD, BOS_WORD, EOS_WORD]
+    src_spelling = torch.LongTensor(len(fields['src'].vocab), src_max_word_size+2).fill_(fields['src_char'].vocab.stoi[PAD_WORD])
+
+    for word in fields['src'].vocab.stoi:  #loops over the keys in stoi (which are strings)
+        w = fields['src'].vocab.stoi[word]
+
+        vec_c = [fields['src_char'].vocab.stoi[BOS_CHAR]] + \
+                [fields['src_char'].vocab.stoi[char] for char in ([word] if word in specials else word)][:max_word_size - 2] + \
+                [fields['src_char'].vocab.stoi[EOS_CHAR]]
+        len_word = len(vec_c)
+        vec_c += [fields['src_char'].vocab.stoi[PAD_WORD]] * (max_word_size - len(vec_c))
+        vec_c += [len_word]
+        vec_c += [fields['src'].vocab.freqs[word]]
+        src_spelling[w, :] = torch.LongTensor(vec_c)
+        #if word in ["gegen",BOS_WORD,EOS_WORD,UNK_WORD]:
+        #    print(spelling[w,:])
+        #    import pdb
+        #    pdb.set_trace()
+
+        #char_index = 0
+        #for char in word:
+        #    c = fields['tgt_char'].vocab.stoi[char]
+        #    spelling[w, char_index] = c
+        #    char_index += 1
+
+    src_spelling_file = opt.save_data + '.src_spelling.pt'
+    torch.save(src_spelling, src_spelling_file)
+
 
     spelling = torch.LongTensor(len(fields['tgt'].vocab), max_word_size+2).fill_(fields['tgt_char'].vocab.stoi[PAD_WORD])
 
-    specials = [PAD_WORD, UNK_WORD, BOS_WORD, EOS_WORD]
 
     for word in fields['tgt'].vocab.stoi:
         w = fields['tgt'].vocab.stoi[word]
@@ -205,6 +233,7 @@ def build_save_spelling(fields, opt, max_word_size):
 
     spelling_file = opt.save_data + '.spelling.pt'
     torch.save(spelling, spelling_file)
+
 
 
 def main():

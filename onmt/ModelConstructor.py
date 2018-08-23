@@ -130,6 +130,7 @@ def load_test_model(opt, dummy_opt):
         fields2 = onmt.io.load_fields_from_vocab(torch.load(model_opt.data + '.vocab.pt'), opt.data_type)
         tgt_char_field = fields2['tgt_char']
         spelling = torch.load(model_opt.data + '.spelling.pt')
+        # also add source side here...
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint, spelling, tgt_char_field)
     else:
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint)
@@ -138,7 +139,9 @@ def load_test_model(opt, dummy_opt):
     return fields, model, model_opt
 
 
-def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_char_field=None):
+def make_base_model(model_opt, fields, gpu, checkpoint=None,
+                    spelling=None, tgt_char_field=None,
+                    src_spelling=None, src_char_field=None):
     """
     Args:
         model_opt: the option loaded from checkpoint.
@@ -156,8 +159,29 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
     if model_opt.model_type == "text":
         src_dict = fields["src"].vocab
         feature_dicts = onmt.io.collect_feature_vocabs(fields, 'src')
-        src_embeddings = make_embeddings(model_opt, src_dict,
-                                         feature_dicts)
+        if model_opt.use_src_char_comp == 0:
+            src_embeddings = make_embeddings(model_opt, src_dict,
+                                             feature_dicts)
+        else:
+            if model_opt.use_char_composition == 'None':
+                src_word_representer = None
+                assert src_word_representer is not None
+            else:
+                print('using src side char composition embedding')
+                src_word_representer = WordRepresenter(src_spelling,
+                                                       len(src_char_field.vocab),
+                                                       src_char_field.vocab.stoi[onmt.io.PAD_WORD],
+                                                       model_opt.tgt_word_vec_size,
+                                                       char_composition=model_opt.use_char_composition,
+                                                       kernals=model_opt.kernals,
+                                                       rnn_size=model_opt.rnn_size)
+                if gpu:
+                    src_word_representer.init_cuda()
+
+                #src_embeddings_normal = make_embeddings(model_opt, src_dict,
+                #                                        feature_dicts)
+                src_embeddings = VarEmbedding(src_word_representer, model_opt.tgt_word_vec_size)
+                #src_embeddings.word_lut.weight = src_embeddings_normal.word_lut.weight
         encoder = make_encoder(model_opt, src_embeddings)
     elif model_opt.model_type == "img":
         encoder = ImageEncoder(model_opt.enc_layers,
@@ -276,7 +300,7 @@ def make_base_model(model_opt, fields, gpu, checkpoint=None, spelling=None, tgt_
                 if p.dim() > 1:
                     xavier_uniform(p)
 
-        if hasattr(model.encoder, 'embeddings'):
+        if hasattr(model.encoder, 'embeddings') and model_opt.use_char_composition == 'None':
             model.encoder.embeddings.load_pretrained_vectors(
                     model_opt.pre_word_vecs_enc, model_opt.fix_word_vecs_enc)
         if hasattr(model.decoder, 'embeddings') and model_opt.use_char_composition == 'None':

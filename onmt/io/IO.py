@@ -285,6 +285,14 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
                     val = [item for item in val if item in src_vocab]
                 elif k == 'tgt' and tgt_vocab:
                     val = [item for item in val if item in tgt_vocab]
+
+                if k == 'src':
+                    #print(val, 'in src k')
+                    for v in list(chain(*val)):
+                        #print(v)
+                        counter['src_char'].update(v) # v is an iterable of characters that contains a single character
+                        counter['src_char'].update([BOS_WORD])
+                        counter['src_char'].update([EOS_WORD])
                 if k == 'tgt':
                     #print(val)
                     for v in list(chain(*val)):
@@ -314,6 +322,9 @@ def build_vocab(train_dataset_files, fields, data_type, share_vocab,
                            max_size=src_vocab_size,
                            min_freq=src_words_min_frequency)
         print(" * src vocab size: %d." % len(fields["src"].vocab))
+
+        _build_field_vocab(fields["src_char"], counter["src_char"])
+        print(" * src char vocab size: %d." % len(fields["src_char"].vocab))
 
         # All datasets have same num of n_src_features,
         # getting the last one is OK.

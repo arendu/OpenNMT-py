@@ -345,18 +345,19 @@ def load_fields(dataset, data_type, checkpoint):
             torch.load(opt.data + '.vocab.pt'), data_type)
 
     tgt_chars_vocab = fields['tgt_char']
+    src_chars_vocab = fields['src_char']
 
     fields = dict([(k, f) for (k, f) in fields.items()
                    if k in dataset.examples[0].__dict__])
 
     if data_type == 'text':
-        print(' * vocabulary size. source = %d; target = %d; target_char = %d' %
-              (len(fields['src'].vocab), len(fields['tgt'].vocab), len(tgt_chars_vocab.vocab)))
+        print(' * vocabulary size. source = %d; target = %d; target_char = %d; source_char = %d' %
+              (len(fields['src'].vocab), len(fields['tgt'].vocab), len(tgt_chars_vocab.vocab), len(src_chars_vocab.vocab)))
     else:
         print(' * vocabulary size. target = %d' %
               (len(fields['tgt'].vocab)))
 
-    return fields, tgt_chars_vocab
+    return fields, tgt_chars_vocab, src_chars_vocab
 
 
 def collect_report_features(fields):
@@ -369,13 +370,18 @@ def collect_report_features(fields):
         print(' * tgt feature %d size = %d' % (j, len(fields[feat].vocab)))
 
 
-def build_model(model_opt, opt, fields, checkpoint, spelling=None, tgt_char_vocab=None):
+def build_model(model_opt, opt, fields, checkpoint,
+                spelling=None, tgt_char_vocab=None,
+                src_spelling=None, src_chars_vocab=None):
     print('Building model...')
     if spelling is not None:
         assert tgt_char_vocab is not None
+        assert src_spelling is not None
+        assert src_chars_vocab is not None
         model = onmt.ModelConstructor.make_base_model(model_opt, fields,
                                                       use_gpu(opt), checkpoint,
-                                                      spelling, tgt_char_vocab)
+                                                      spelling, tgt_char_vocab,
+                                                      src_spelling, src_chars_vocab)
     else:
         model = onmt.ModelConstructor.make_base_model(model_opt, fields,
                                                       use_gpu(opt), checkpoint)
@@ -500,7 +506,7 @@ def main():
     data_type = first_dataset.data_type
 
     # Load fields generated from preprocess phase.
-    fields, tgt_char_vocab = load_fields(first_dataset, data_type, checkpoint)
+    fields, tgt_char_vocab, src_chars_vocab = load_fields(first_dataset, data_type, checkpoint)
 
 
     # Report src/tgt features.
@@ -509,7 +515,8 @@ def main():
     # Build model.
     if model_opt.use_char_composition:
         spelling = torch.load(opt.data + '.spelling.pt')
-        model = build_model(model_opt, opt, fields, checkpoint, spelling, tgt_char_vocab)
+        src_spelling = torch.load(opt.data + '.src_spelling.pt')
+        model = build_model(model_opt, opt, fields, checkpoint, spelling, tgt_char_vocab, src_spelling, src_chars_vocab)
     else:
         model = build_model(model_opt, opt, fields, checkpoint)
     tally_parameters(model)
