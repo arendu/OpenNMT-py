@@ -186,7 +186,7 @@ def preprocess_opts(parser):
                        help="Path prefix to existing features vocabularies")
     group.add_argument('-src_vocab_size', type=int, default=200000,
                        help="Size of the source vocabulary")
-    group.add_argument('-tgt_vocab_size', type=int, default=200000,
+    group.add_argument('-tgt_vocab_size', type=int, default=100000,
                        help="Size of the target vocabulary")
 
     group.add_argument('-src_words_min_frequency', type=int, default=0)
@@ -301,7 +301,7 @@ def train_opts(parser):
                        Approximately equivalent to updating
                        batch_size * accum_count batches at once.
                        Recommended for Transformer.""")
-    group.add_argument('-valid_batch_size', type=int, default=64,
+    group.add_argument('-valid_batch_size', type=int, default=8,
                        help='Maximum batch size for validation')
     group.add_argument('-max_generator_batches', type=int, default=32,
                        help="""Maximum batches of words in a sequence to run

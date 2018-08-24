@@ -68,8 +68,9 @@ class HighwayNetwork(nn.Module):
     def forward(self, x):
         t = self.trans_gate(x)
         h = self.h_layer(x)
-        z = torch.mul(t, h)+torch.mul(1.0 - t, x)
-        return z
+        z = torch.mul(t, h) + torch.mul(1.0 - t, x)
+        #h.mul_(t).addcmul_(1.0 -t, x)
+        return h
 
 
 class WordRepresenter(nn.Module):
@@ -166,8 +167,8 @@ class WordRepresenter(nn.Module):
             for cnn in self.cnns:
                 cnn[0].weight.data.uniform_(-0.05, 0.05)
                 cnn[0].bias.data.fill_(0.)
-            self.highway1 = HighwayNetwork(self.we_size)
-            self.highway2 = HighwayNetwork(self.we_size)
+            #self.highway1 = HighwayNetwork(self.we_size)
+            #self.highway2 = HighwayNetwork(self.we_size)
             #self.c1d_3g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 3)
             #self.c1d_4g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 4)
             #self.c1d_5g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 5)
@@ -266,8 +267,8 @@ class WordRepresenter(nn.Module):
         #diff = abs((word_embeddings_stream - word_embeddings).sum().data[0])
         #print(diff)
         #assert diff == 0
-        word_embeddings = self.highway1(word_embeddings)
-        word_embeddings = self.highway2(word_embeddings)
+        #word_embeddings = self.highway1(word_embeddings)
+        #word_embeddings = self.highway2(word_embeddings)
         del emb, tmp  # m_3g, m_4g, m_5g, m_6g
         return word_embeddings
 
@@ -336,7 +337,7 @@ class WordRepresenter(nn.Module):
             return self.cached
         else:
             unsorted_word_embeddings = []
-            for tgt_part in torch.split(self.vocab_idx.data, self.v_size // 10):
+            for tgt_part in torch.split(self.vocab_idx.data, self.v_size // 20):
                 emb_part = self(tgt_part)
                 emb_part = emb_part.detach()
                 unsorted_word_embeddings.append(emb_part)
@@ -374,7 +375,10 @@ class WordRepresenter(nn.Module):
         elif self.use_wordgate_embeddings:
             word_embeddings = self.word_embeddings(selected_vocab_idx)
             merge = self.merge_weights(selected_vocab_idx)
+            #word_embeddings.mul(merge).addcmul_(1.0 - merge, unsorted_composed_word_embeddings)
+            #unsorted_word_embeddings = word_embeddings
             unsorted_word_embeddings = (merge * word_embeddings) + ((1.0 - merge) * unsorted_composed_word_embeddings)
+	    #h.mul_(t).addcmul_(1.0 -t, x)
         else:
             unsorted_word_embeddings = unsorted_composed_word_embeddings
         return unsorted_word_embeddings
