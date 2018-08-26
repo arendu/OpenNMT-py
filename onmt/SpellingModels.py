@@ -6,7 +6,6 @@ from torch.autograd import Variable
 from torch.nn.utils.rnn import pack_padded_sequence as pack
 from torch.nn.utils.rnn import pad_packed_sequence as unpack
 import numpy as np
-import pdb
 
 
 class StreamWrapper():
@@ -101,6 +100,7 @@ class WordRepresenter(nn.Module):
         self.ce_layer.weight = nn.Parameter(
             torch.FloatTensor(self.cv_size, self.ce_size).uniform_(-0.5 / self.ce_size, 0.5 / self.ce_size))
         char_comp_items = char_composition.split('+')
+        print(char_comp_items)
         self.char_composition = char_comp_items[0]
         self.cached = None
         if self.rnn_size != self.we_size:
@@ -116,6 +116,15 @@ class WordRepresenter(nn.Module):
             self.use_word_embeddings = False
             self.use_wordgate_embeddings = False
             self.use_wordfreq_embeddings = False
+
+        if len(char_comp_items) == 3:
+            assert self.char_composition == 'CNN'
+            self.cnn_mix = char_comp_items[2]
+            print(self.cnn_mix, char_comp_items)
+            assert self.cnn_mix in set(['add', 'cat'])
+        else:
+            self.cnn_mix = 'cat'
+        print('using cnn_mix:', self.cnn_mix)
         self.pool = pool
         if self.use_wordfreq_embeddings:
             print('using wordfreq_embeddings')
@@ -154,37 +163,31 @@ class WordRepresenter(nn.Module):
                 self.c_proj = None
         elif self.char_composition == 'CNN':
             kernals = [int(i) for i in kernals]
-            assert self.we_size % len(kernals) == 0
+            if self.cnn_mix == 'cat':
+                assert self.we_size % len(kernals) == 0
             cnns = []
             for k in kernals:
-                seq = nn.Sequential(
-                    nn.Conv1d(self.ce_size, self.we_size // len(kernals), k, padding=cp_idx),
-                    nn.Tanh(),
-                    nn.MaxPool1d(self.spellings.size(1) - k + 1)
-                    )
+                if self.cnn_mix == 'cat':
+                    seq = nn.Sequential(
+                        nn.Conv1d(self.ce_size, self.we_size // len(kernals), k, padding=cp_idx),
+                        nn.Tanh(),
+                        nn.MaxPool1d(self.spellings.size(1) - k + 1)
+                        )
+                elif self.cnn_mix == 'add':
+                    seq = nn.Sequential(
+                        nn.Conv1d(self.ce_size, self.we_size, k, padding=cp_idx),
+                        nn.Tanh(),
+                        nn.MaxPool1d(self.spellings.size(1) - k + 1)
+                        )
+                else:
+                    raise BaseException("Unkown cnn_mix")
                 cnns.append(seq)
             self.cnns = nn.ModuleList(cnns)
             for cnn in self.cnns:
                 cnn[0].weight.data.uniform_(-0.05, 0.05)
                 cnn[0].bias.data.fill_(0.)
-            #self.highway1 = HighwayNetwork(self.we_size)
-            #self.highway2 = HighwayNetwork(self.we_size)
-            #self.c1d_3g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 3)
-            #self.c1d_4g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 4)
-            #self.c1d_5g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 5)
-            #self.c1d_6g = torch.nn.Conv1d(self.ce_size, self.we_size // 4, 6)
-            #if self.pool == 'Avg':
-            #    self.max_3g = torch.nn.AvgPool1d(self.spellings.size(1) - 3 + 1)
-            #    self.max_4g = torch.nn.AvgPool1d(self.spellings.size(1) - 4 + 1)
-            #    self.max_5g = torch.nn.AvgPool1d(self.spellings.size(1) - 5 + 1)
-            #    self.max_6g = torch.nn.AvgPool1d(self.spellings.size(1) - 6 + 1)
-            #elif self.pool == 'Max':
-            #    self.max_3g = torch.nn.MaxPool1d(self.spellings.size(1) - 3 + 1)
-            #    self.max_4g = torch.nn.MaxPool1d(self.spellings.size(1) - 4 + 1)
-            #    self.max_5g = torch.nn.MaxPool1d(self.spellings.size(1) - 5 + 1)
-            #    self.max_6g = torch.nn.MaxPool1d(self.spellings.size(1) - 6 + 1)
-            #else:
-            #    raise BaseException("uknown pool")
+            self.highway1 = HighwayNetwork(self.we_size)
+            self.highway2 = HighwayNetwork(self.we_size)
         else:
             raise BaseException("Unknown seq model")
 
@@ -227,48 +230,16 @@ class WordRepresenter(nn.Module):
     def cnn_representer(self, emb):
         # (batch, seq_len, char_emb_size)
         emb = emb.transpose(1, 2)
-        # m_3g = self.max_3g(nn.functional.tanh(self.c1d_3g(emb))).squeeze()
-        # m_4g = self.max_4g(nn.functional.tanh(self.c1d_4g(emb))).squeeze()
-        # m_5g = self.max_5g(nn.functional.tanh(self.c1d_5g(emb))).squeeze()
-        # m_6g = self.max_6g(nn.functional.tanh(self.c1d_6g(emb))).squeeze()
-        #stream_tmp = []
-        #streams = [(idx, torch.cuda.Stream()) for idx, cnn in enumerate(self.cnns)]
-        #wrapped_stream = [StreamWrapper(idx, s) for idx, s in streams]
-        #print(torch.cuda.current_device())
-        #with torch.cuda.stream(wrapped_stream[0].stream):
-        #    print('start stream 0')
-        #    cnn = self.cnns[wrapped_stream[0].idx]
-        #    stream_tmp.append((wrapped_stream[0].idx, cnn(emb).squeeze()))
-        #    print('end stream 0')
-        ##torch.cuda.synchronize()
-        #with torch.cuda.stream(wrapped_stream[1].stream):
-        #    print('start stream 1')
-        #    cnn = self.cnns[wrapped_stream[1].idx]
-        #    stream_tmp.append((wrapped_stream[1].idx, cnn(emb).squeeze()))
-        #    print('end stream 1')
-        ##torch.cuda.synchronize()
-        #with torch.cuda.stream(wrapped_stream[2].stream):
-        #    print('start stream 2')
-        #    cnn = self.cnns[wrapped_stream[2].idx]
-        #    stream_tmp.append((wrapped_stream[2].idx, cnn(emb).squeeze()))
-        #    print('end stream 2')
-        ##torch.cuda.synchronize()
-        #with torch.cuda.stream(wrapped_stream[3].stream):
-        #    print('start stream 3')
-        #    cnn = self.cnns[wrapped_stream[3].idx]
-        #    stream_tmp.append((wrapped_stream[3].idx, cnn(emb).squeeze()))
-        #    print('end stream 3')
-        #torch.cuda.synchronize()
-        #assert len(stream_tmp) == 4
-        #stream_tmp = [t for idx, t in sorted(stream_tmp)]
-        #word_embeddings_stream = torch.cat(stream_tmp, dim=1)
+        # (batch, char_emb_size, seq_len)
         tmp = [_cnn(emb).squeeze() for _cnn in self.cnns]
-        word_embeddings = torch.cat(tmp, dim=1)
-        #diff = abs((word_embeddings_stream - word_embeddings).sum().data[0])
-        #print(diff)
-        #assert diff == 0
-        #word_embeddings = self.highway1(word_embeddings)
-        #word_embeddings = self.highway2(word_embeddings)
+        if self.cnn_mix == 'cat':
+            word_embeddings = torch.cat(tmp, dim=1)
+        elif self.cnn_mix == 'add':
+            word_embeddings = sum(tmp)
+        else:
+            raise NotImplementedError("unknown cnn_mix")
+        word_embeddings = self.highway1(word_embeddings)
+        word_embeddings = self.highway2(word_embeddings)
         del emb, tmp  # m_3g, m_4g, m_5g, m_6g
         return word_embeddings
 
@@ -378,7 +349,6 @@ class WordRepresenter(nn.Module):
             #word_embeddings.mul(merge).addcmul_(1.0 - merge, unsorted_composed_word_embeddings)
             #unsorted_word_embeddings = word_embeddings
             unsorted_word_embeddings = (merge * word_embeddings) + ((1.0 - merge) * unsorted_composed_word_embeddings)
-	    #h.mul_(t).addcmul_(1.0 -t, x)
         else:
             unsorted_word_embeddings = unsorted_composed_word_embeddings
         return unsorted_word_embeddings
@@ -395,7 +365,8 @@ class VarLinear(nn.Module):
             self.word_representer.cached = None
             var = self.word_representer(tgt_select)
         else:
-            var = self.word_representer.forward_parts()
+            #var = self.word_representer.forward_parts()
+            var = self.word_representer(None)
         # shape of var is (vocab_size, hidden_size)
         if data.dim() > 1:
             var_proj = var if self.word_representer.proj is None else self.word_representer.proj(var)
@@ -423,7 +394,8 @@ class VarEmbedding(nn.Module):
             var = self.word_representer(data_u)
         else:
             # var = self.word_representer(None)
-            var = self.word_representer.forward_parts()
+            var = self.word_representer(None)
+            #var = self.word_representer.forward_parts()
         embedding_size = var.size(1)
         if data.dim() == 2:
             batch_size = data.size(0)
@@ -450,3 +422,28 @@ class VarGenerator(nn.Module):
     def forward(self, input, tgt_select=None):
         var_lin = self.var_linear(input, tgt_select)
         return self.log_softmax(var_lin)
+
+
+if __name__ == '__main__':
+    #def __init__(self, spelling_matrix, cv_size, cp_idx, we_size, rnn_size,
+    #             bidirectional=True, dropout=0.3,
+    #             is_extra_feat_learnable=False,
+    #             ce_size=50,
+    #             cr_size=100,
+    #             c_rnn_layers=1,
+    #             char_composition='RNN',
+    #             pool='Max',
+    #             kernals='3456'):
+    cv_size = 3
+    v_size = 10
+    we_size = 32
+    rnn_size = 50
+    spellings = torch.LongTensor(np.random.randint(0, cv_size, (v_size, 23)))
+    ws = WordRepresenter(spellings, cv_size, 0, we_size, rnn_size,  char_composition='CNN+Wordgate+add')
+    vocab_idx = Variable(torch.arange(v_size).long(), requires_grad=False)
+    tgt_select = vocab_idx.data
+    selected_spellings = ws.spellings[tgt_select, :]
+    selected_vocab_idx = Variable(tgt_select, requires_grad=False)
+    emb = ws.ce_layer(selected_spellings)
+    cnn_emb = ws.cnn_representer(emb)
+    print(cnn_emb.shape)

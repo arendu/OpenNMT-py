@@ -22,7 +22,7 @@ def model_opts(parser):
     group.add_argument('-word_vec_size', type=int, default=-1,
                        help='Word embedding size for src and tgt.')
     group.add_argument('-use_char_composition', type=str,
-                       default='None', choices=set(['CNN', 'RNN', 'CNN+Word', 'RNN+Word', 'None', 'CNN+Wordgate', 'RNN+Wordgate']),
+                       default='None', choices=set(['CNN', 'RNN', 'CNN+Word', 'RNN+Word', 'None', 'CNN+Wordgate+cat', 'CNN+Wordgate+add']),
                        help='use char_composition.')
     group.add_argument('-use_char_for', choices=set(['both', 'embedding', 'softmax']),
                        default='both',
@@ -186,7 +186,7 @@ def preprocess_opts(parser):
                        help="Path prefix to existing features vocabularies")
     group.add_argument('-src_vocab_size', type=int, default=200000,
                        help="Size of the source vocabulary")
-    group.add_argument('-tgt_vocab_size', type=int, default=100000,
+    group.add_argument('-tgt_vocab_size', type=int, default=200000,
                        help="Size of the target vocabulary")
 
     group.add_argument('-src_words_min_frequency', type=int, default=0)
