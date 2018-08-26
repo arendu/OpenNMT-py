@@ -517,7 +517,7 @@ def main():
         spelling = torch.load(opt.data + '.spelling.pt')
         src_spelling = torch.load(opt.data + '.src_spelling.pt')
         print('tgt spelling matrix', spelling.shape)
-        print('src spelling matrix', spelling.shape)
+        print('src spelling matrix', src_spelling.shape)
         model = build_model(model_opt, opt, fields, checkpoint, spelling, tgt_char_vocab, src_spelling, src_chars_vocab)
     else:
         model = build_model(model_opt, opt, fields, checkpoint)
