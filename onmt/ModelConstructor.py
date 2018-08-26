@@ -129,9 +129,11 @@ def load_test_model(opt, dummy_opt):
     if model_opt.use_char_composition:
         fields2 = onmt.io.load_fields_from_vocab(torch.load(model_opt.data + '.vocab.pt'), opt.data_type)
         tgt_char_field = fields2['tgt_char']
+        src_char_field = fields2['src_char']
         spelling = torch.load(model_opt.data + '.spelling.pt')
+        src_spelling = torch.load(model_opt.data + '.src_spelling.pt')
         # also add source side here...
-        model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint, spelling, tgt_char_field)
+        model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint, spelling, tgt_char_field, src_spelling, src_char_field)
     else:
         model = make_base_model(model_opt, fields, use_gpu(opt), checkpoint)
     model.eval()

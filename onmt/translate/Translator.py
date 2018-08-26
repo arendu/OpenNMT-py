@@ -23,7 +23,6 @@ def make_translator(opt, report_score=True, out_file=None):
     dummy_parser = argparse.ArgumentParser(description='train.py')
     onmt.opts.model_opts(dummy_parser)
     dummy_opt = dummy_parser.parse_known_args([])[0]
-
     fields, model, model_opt = \
         onmt.ModelConstructor.load_test_model(opt, dummy_opt.__dict__)
 
